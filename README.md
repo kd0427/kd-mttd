@@ -1,4 +1,4 @@
-# TLI Tracker
+# mTTD
 
 *Torchlight: Infinite* 모바일 클라이언트의 파밍 수익을 실시간으로 집계하는 안드로이드 오버레이 앱.
 
@@ -42,7 +42,7 @@ Shizuku가 이미 돌고 있다면 다음 단계로 넘어가면 된다.
 
 ### 2. APK 설치
 
-[GitHub Releases](https://github.com/listil/tli-tracker-android/releases/latest) 에서 최신
+[GitHub Releases](https://github.com/listil/mttd/releases/latest) 에서 최신
 `app-release.apk` 를 내려받아 기기로 복사한 뒤, 파일 관리자에서 실행 →
 "출처를 알 수 없는 앱" 허용.
 

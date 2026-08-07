@@ -4,6 +4,7 @@ import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.mttd.data.shizuku.ShizukuManager
+import com.mttd.diagnostics.CrashLogger
 import com.mttd.service.TrackerForegroundService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,7 @@ class TrackerApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLogger.install(this)
         instance = this
         shizukuManager = ShizukuManager(this).also { it.start() }
     }

@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package price;
+
+option java_package = "com.mttd.proto.price";
+option java_multiple_files = true;
+
+// -----------------------------------------------------------------------------
+// Endpoints (all on https://etor-zero.981001.xyz — no WAF, no auth headers)
+// -----------------------------------------------------------------------------
+//
+// 1. GET /etor-api/api/prices-snapshot/{seasonId}?format=protobuf
+//    - PRIMARY endpoint for current market prices.
+//    - Returns PriceResponse with:
+//        mode="full", totalCount>0, version=<hash>
+//        items[]: id, price, updatedAt   (t15 empty here)
+//    - Supports delta with ?fromVersion=<hash>&format=protobuf — server may
+//      then return mode!="full" and only the changed items.
+//    - Client cache TTL: 1h. Delta req allowed even if empty.
+//
+// 2. GET /etor-api/api/prices-t15/{seasonId}?format=protobuf
+//    - Time-series companion for sparklines/mini-charts.
+//    - Returns PriceResponse where each item has ONLY t15[] populated
+//      (price=0, updatedAt="", mode="", version="", totalCount=0).
+//    - Cache in bundle: Map keyed by seasonId, TTL 3600000 ms.
+//
+// 3. GET /etor-api/api/prices/{seasonId}?format=protobuf
+//    - Legacy/alternate. Returns a `price` sentinel-like value (710421056 seen
+//      for many items). AVOID — use `prices-snapshot` instead.
+//
+// Season IDs (from bundle's Ta[] const, mode=="standard"):
+//   s12 → "1401", s13 → "1501" (current).
+//
+// -----------------------------------------------------------------------------
+// Wire schema (verbatim from protobufjs Root.fromJSON in index-BqApTrW9.js,
+// verified byte-for-byte against real captures in ../samples/)
+// -----------------------------------------------------------------------------
+
+message PriceItem {
+  string id            = 1; // item ID (numeric string, e.g. "112310" or "5030")
+  string seasonId      = 2; // rarely populated in items (server drops when equal to top-level)
+  float  price         = 3; // gold value; only populated by /prices-snapshot
+  string updatedAt     = 4; // ISO8601; only populated by /prices-snapshot
+  repeated sint32 t15  = 5 [packed = true];
+                            // ~15-24 signed samples, populated only by /prices-t15.
+                            // Zigzag varints; likely price deltas over recent windows.
+                            // Not required for MVP profit calc.
+}
+
+message PriceResponse {
+  string seasonId              = 1;
+  repeated PriceItem items     = 2;
+  string mode                  = 3; // "full" for prices-snapshot full pull, empty for t15
+  string version               = 4; // etag-like hash; use for delta requests
+  uint32 totalCount            = 5;
+}

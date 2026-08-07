@@ -1,0 +1,16 @@
+{
+    "prefix": {
+		"YL_LieShenLinYuan": "[새싹]새싹이 돋아나는 요람",
+        "CC1_SiWangMiCheng": "[시즌2]미궁_영원의 무너진 벽:광활",
+		"WuDuYiZhi": "[시즌4]안개도시/괴담",
+		"XueYuRongLu": "[시즌6]그림 속 설원",
+		"SuMingTaLuo": "[시즌7]타로_숙명의 대결",
+		"YunDuanLvZhou": "[시즌8]클라우드 오아시스",
+		"SQ_NvShenQunBai": "[군주]모래폭풍 속 고급 보물창고",
+		
+		"DD_WeiChengXingDong" : "위험한 도시 방어선",
+		"TouHaoTongJi" : "타워 중앙 금고",
+		"DiXiaZhenSuo": "[시즌13]미치광이 의사 세라의 수술실"		
+    },
+    "_comment": "diablo2"
+}

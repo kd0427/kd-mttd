@@ -1,0 +1,124 @@
+# mTTD (Android) 빌드 가이드
+
+소스에서 직접 빌드해서 설치하려는 개발자·기여자용 문서다. GitHub Release APK 를
+받아 쓰는 일반 사용자는 **[README.md](README.md)** 의 "설치와 사용법"을 참고하면 된다
+(Shizuku 준비, 최초 실행 설정, HUD 사용법 모두 그쪽에 있다 — 빌드한 APK 도 동일하게 동작).
+
+---
+
+## 1. 빌드 요구사항
+
+| 항목 | 요구사항 |
+|---|---|
+| JDK | 17 |
+| Android SDK | `local.properties` 에 `sdk.dir` 지정 필요 |
+| 기기 | Android 10 (API 29) 이상, 게임 설치됨, Shizuku 준비됨 |
+
+---
+
+## 2. 소스 빌드
+
+```bash
+git clone https://github.com/listil/mttd
+cd mttd
+
+# Android SDK 경로 지정 (환경에 맞게 수정)
+echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
+
+./gradlew :app:assembleDebug
+```
+
+산출물은 `app/build/outputs/apk/debug/app-debug.apk`.
+
+### 릴리스 빌드
+
+`keystore.properties` 가 있으면 자동으로 서명된다. 없으면 서명 없이 빌드된다.
+
+```properties
+# keystore.properties (커밋 금지)
+storeFile=release.jks
+storePassword=...
+keyAlias=mttd
+keyPassword=...
+```
+
+```bash
+./gradlew :app:assembleRelease
+```
+
+---
+
+## 3. adb로 설치
+
+```bash
+# 유선
+adb install -r app-debug.apk
+
+# 무선 디버깅
+adb connect 192.168.0.x:xxxxx
+adb -s 192.168.0.x:xxxxx install -r app-debug.apk
+```
+
+기기가 여러 대면 `adb devices -l` 로 확인 후 `-s` 로 지정.
+
+설치가 제대로 됐는지 확인:
+```bash
+adb shell dumpsys package com.mttd.debug | grep versionName
+```
+
+> debug 빌드는 패키지명이 `com.mttd.debug` 라 release 빌드(`com.mttd`)와
+> 함께 설치할 수 있다.
+
+---
+
+## 4. 문제 해결 (adb 기반 진단)
+
+### 수익이 계속 0
+
+시세를 못 받은 경우.
+```bash
+adb logcat -d | grep "mTTD.Prices"
+```
+`loaded N prices` 가 안 보이면 네트워크 문제. 앱의 **시세** 카드에서 `아이템 수` 가
+1000 이상인지 확인하고, 아니면 **새로고침** 버튼을 누른다.
+
+### 개수는 잡히는데 금액이 안 뜸
+
+해당 아이템에 시세가 없는 경우. 앱의 **세션** 카드 `총 수익` 옆 `(미가격 N)` 이 그 개수다.
+신규 시즌 아이템이면 서버에 시세가 아직 없을 수 있다.
+
+### `가방 정렬을 눌러주세요` 가 안 사라짐
+
+로그를 읽고 있는지부터 확인.
+```bash
+adb logcat -d | grep "mTTD.Service"
+```
+`poller started:` 가 없다면 Shizuku가 끊긴 것이다 (재부팅 후 흔함). Shizuku 앱에서
+다시 시작한 뒤, 트래커 앱을 한 번 연다.
+
+### 오버레이가 안 보임
+
+- "다른 앱 위에 표시" 권한 확인
+- 게임이 전체화면 몰입 모드면 일부 기기에서 가려질 수 있음
+- 앱의 **오버레이** 카드 → **오버레이 표시** 로 다시 띄우기
+
+### 아무 로그도 안 나옴
+
+게임이 로그 파일을 만들고 있는지 확인:
+```bash
+adb shell ls -la /sdcard/Android/data/com.xd.TLglobal/files/UE4Game/UE_game/UE_game/Saved/Logs/
+```
+`UE_game.log` 의 크기가 플레이 중에 계속 커져야 정상.
+
+---
+
+## 5. 제거
+
+```bash
+adb uninstall com.mttd.debug
+# 릴리스 빌드라면
+adb uninstall com.mttd
+```
+
+앱을 삭제하면 끝이다. 게임 쪽에는 아무것도 남기지 않는다. Shizuku 를 다른 앱에서 안 쓴다면
+같이 지우고, 개발자 옵션의 무선 디버깅도 꺼주면 된다.

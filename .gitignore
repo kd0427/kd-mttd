@@ -1,0 +1,34 @@
+# Android / Gradle
+.gradle/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Kotlin compiler daemon cache
+.kotlin/
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+package-lock.json
+
+# APK artifacts (should be released, not committed)
+*.apk
+*.aab
+
+*.keystore
+*.jks
+keystore.properties
+
+phase0/

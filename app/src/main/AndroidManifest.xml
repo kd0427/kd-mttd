@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ================= 권한 ================= -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Shizuku V3 -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+
+    <!-- 오버레이 (M3 에서 활성화) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 포그라운드 서비스 (M1 에서 활성화) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 명시적으로 요청/사용하지 않는 것들 (감사용 주석):
+         - 광고 ID (ACCESS_ADSERVICES_*)
+         - 위치 (ACCESS_*_LOCATION)
+         - 카메라/마이크
+         - 전화 상태 (READ_PHONE_STATE)
+         이들은 절대 선언하지 않는다 (보안 원칙 3). -->
+
+    <!-- 다른 앱 패키지 조회 (Android 11+) — 게임 설치 감지용 -->
+    <queries>
+        <package android:name="com.xindong.torchlight" />
+        <package android:name="com.xd.TLglobal" />
+        <package android:name="com.xd.TLglobalTap" />
+        <package android:name="moe.shizuku.privileged.api" />
+    </queries>
+
+    <application
+        android:name=".TrackerApplication"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.mTTD"
+        android:allowBackup="false"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
+        android:extractNativeLibs="false"
+        tools:targetApi="34"
+        xmlns:tools="http://schemas.android.com/tools">
+
+        <!-- Shizuku Provider (표준 provider — Shizuku 앱과 통신) -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <meta-data
+            android:name="moe.shizuku.client.V3_SUPPORT"
+            android:value="true" />
+
+        <service
+            android:name=".service.TrackerForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="true" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="screenSize|orientation|keyboardHidden|screenLayout|smallestScreenSize|density|uiMode"
+            android:theme="@style/Theme.mTTD">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

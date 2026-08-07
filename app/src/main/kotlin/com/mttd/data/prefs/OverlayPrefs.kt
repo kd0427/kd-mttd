@@ -1,0 +1,66 @@
+package com.mttd.data.prefs
+
+import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+/**
+ * 오버레이 위치/투명도 + 앱 설정 저장소.
+ *
+ * 위치 값은 dp 가 아닌 px 단위로 저장 (`WindowManager.LayoutParams.x/y` 와 직접 매치).
+ * 서로 다른 해상도로 이동해도 화면 안이면 유효한 좌표.
+ */
+class OverlayPrefs(private val context: Context) {
+
+    /** 시세 출처. 값은 [com.mttd.data.prices.PriceSource.id]. */
+    val priceSourceId: Flow<String> = context.dataStore.data.map { it[KEY_PRICE_SOURCE] ?: "etor" }
+
+    suspend fun setPriceSourceId(id: String) {
+        context.dataStore.edit { it[KEY_PRICE_SOURCE] = id }
+    }
+
+    val iconX: Flow<Int> = context.dataStore.data.map { it[KEY_ICON_X] ?: 60 }
+    val iconY: Flow<Int> = context.dataStore.data.map { it[KEY_ICON_Y] ?: 300 }
+    val hudX: Flow<Int> = context.dataStore.data.map { it[KEY_HUD_X] ?: 60 }
+    val hudY: Flow<Int> = context.dataStore.data.map { it[KEY_HUD_Y] ?: 400 }
+    val hudAlpha: Flow<Float> = context.dataStore.data.map { it[KEY_HUD_ALPHA] ?: 0.85f }
+    val hudVisible: Flow<Boolean> = context.dataStore.data.map { it[KEY_HUD_VISIBLE] ?: false }
+
+    suspend fun setIconPosition(x: Int, y: Int) {
+        context.dataStore.edit {
+            it[KEY_ICON_X] = x
+            it[KEY_ICON_Y] = y
+        }
+    }
+
+    suspend fun setHudPosition(x: Int, y: Int) {
+        context.dataStore.edit {
+            it[KEY_HUD_X] = x
+            it[KEY_HUD_Y] = y
+        }
+    }
+
+    suspend fun setHudAlpha(a: Float) {
+        context.dataStore.edit { it[KEY_HUD_ALPHA] = a.coerceIn(0.2f, 1f) }
+    }
+
+    suspend fun setHudVisible(v: Boolean) {
+        context.dataStore.edit { it[KEY_HUD_VISIBLE] = v }
+    }
+
+    companion object {
+        private val Context.dataStore by preferencesDataStore(name = "overlay_prefs")
+        private val KEY_ICON_X = intPreferencesKey("icon_x")
+        private val KEY_ICON_Y = intPreferencesKey("icon_y")
+        private val KEY_HUD_X = intPreferencesKey("hud_x")
+        private val KEY_HUD_Y = intPreferencesKey("hud_y")
+        private val KEY_HUD_ALPHA = floatPreferencesKey("hud_alpha")
+        private val KEY_HUD_VISIBLE = booleanPreferencesKey("hud_visible")
+        private val KEY_PRICE_SOURCE = androidx.datastore.preferences.core.stringPreferencesKey("price_source")
+    }
+}

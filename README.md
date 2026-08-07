@@ -43,7 +43,7 @@ Shizuku가 이미 돌고 있다면 다음 단계로 넘어가면 된다.
 ### 2. APK 설치
 
 [GitHub Releases](https://github.com/listil/mttd/releases/latest) 에서 최신
-`app-release.apk` 를 내려받아 기기로 복사한 뒤, 파일 관리자에서 실행 →
+`mttd-x.y.z-release.apk` 를 내려받아 기기로 복사한 뒤, 파일 관리자에서 실행 →
 "출처를 알 수 없는 앱" 허용.
 
 ### 3. 최초 실행 설정

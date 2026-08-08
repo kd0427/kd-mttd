@@ -99,6 +99,8 @@ fun RunBarChart(
 
     val maxAbs = runs.maxOf { kotlin.math.abs(it.totalValue) }.coerceAtLeast(1e-9)
     val density = LocalDensity.current
+    // 막대 그래프와 아래 회차 번호 라벨이 같이 스크롤되도록 하나의 상태를 공유한다.
+    val chartScrollState = rememberScrollState()
     val barW = 28.dp
     val gap = 6.dp
     val chartH = 150.dp
@@ -145,7 +147,7 @@ fun RunBarChart(
             }
             Row(
                 modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
+                    .horizontalScroll(chartScrollState)
                     .height(chartH),
             ) {
                 Canvas(
@@ -204,8 +206,8 @@ fun RunBarChart(
                 }
             }
         }
-        // 회차 번호 라벨 (막대와 같은 폭으로 정렬)
-        Row(modifier = Modifier.horizontalScroll(rememberScrollState()).padding(start = 38.dp)) {
+        // 회차 번호 라벨 (막대와 같은 폭으로 정렬, 같은 스크롤 상태 공유)
+        Row(modifier = Modifier.horizontalScroll(chartScrollState).padding(start = 38.dp)) {
             runs.forEach { run ->
                 Text(
                     "${run.index}",

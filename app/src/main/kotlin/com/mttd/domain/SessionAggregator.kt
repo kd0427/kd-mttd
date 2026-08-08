@@ -259,10 +259,11 @@ class SessionAggregator(
         // 필터를 건너뛰어야 한다.
         if (xchgMode == XchgMode.NONE && !isInteresting(line)) return
 
-        // 여기 도달했으면 실제 게임 이벤트 라인을 하나 본 것 — TCP Ping 같은 유휴 트래픽과는
-        // 다르다. "로그 오픈을 했는지" UI 안내가 이 신호를 쓴다 (LogPoller 의 파일 크기 증가
-        // 신호만으로는 게임을 켜기만 해도 몇 초 안에 참이 되어버려 구분이 안 됐다).
-        if (!logActivitySeen) {
+        // "로그 오픈을 했는지" UI 안내가 쓰는 신호. 처음엔 isInteresting() 통과만으로 판정했는데
+        // 그것도 너무 일렀다 — MapName/----Socket 은 로그인 화면·메뉴 단계에서도 바로 찍혀서
+        // (LogPoller 의 파일 크기 증가 신호와 똑같은 문제). 인벤토리에 실제로 손을 댄 뒤에만
+        // 나오는 ItemChange@/BagMgr@: 라인으로 기준을 좁힌다.
+        if (!logActivitySeen && (line.contains("ItemChange@") || line.contains("BagMgr@:"))) {
             logActivitySeen = true
             _state.update { it.copy(logActivityDetected = true) }
         }

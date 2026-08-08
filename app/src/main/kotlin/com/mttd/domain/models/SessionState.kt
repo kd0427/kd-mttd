@@ -58,8 +58,11 @@ data class SessionState(
     val baselineReady: Boolean = false,
 
     /**
-     * 로그에서 실제 게임 이벤트 라인(ItemChange@, BagMgr@:, MapName, OnEnterArea 등)을
-     * 한 번이라도 관측했는지.
+     * 로그에서 인벤토리 관련 라인(`ItemChange@`, `BagMgr@:`)을 한 번이라도 관측했는지.
+     *
+     * `MapName`/`----Socket` 등 다른 관심 라인은 로그인 화면·메뉴 단계에서도 바로 찍혀서
+     * "의미 있는 활동"의 기준으로 쓰기엔 너무 이르다 — 인벤토리에 실제로 손을 댄 뒤에만
+     * 나오는 라인으로 좁혔다.
      *
      * 게임은 대기 상태에서도 TCP Ping 으로 로그 파일 크기 자체는 계속 늘어나므로
      * (`LogPoller.PollingStatus.gameLikelyRunning`), "로그 파일이 자라고 있다" 만으로는

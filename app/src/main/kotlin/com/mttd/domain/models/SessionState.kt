@@ -66,6 +66,11 @@ data class SessionState(
 
     /** 1분당 1점, 최대 60개 슬라이딩. 누적 [totalValue] 시계열. */
     val valueSeries: List<TimeSample> = emptyList(),
+
+    /** 게임 내 거래소(경매장) 화면이 열려있는 동안 true. 열려있는 동안은 픽업 집계를 멈춘다. */
+    val inExchange: Boolean = false,
+    /** 거래소 진입 시점(또는 수동 새로고침 시점)의 현재 보유 아이템, 가치 내림차순. */
+    val holdings: List<PickupSummary> = emptyList(),
 ) {
     /**
      * 경과 시간. baseline (가방 정렬) 관측 전에는 0.

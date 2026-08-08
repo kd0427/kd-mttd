@@ -59,15 +59,17 @@ private const val VISIBLE_ROWS = 4
 /** 한 줄 높이(아이콘 14 dp) + 줄 간격 2 dp. */
 private val ROW_HEIGHT = 16.dp
 private val MAX_LIST_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS
+/** 거래소 화면(보유 아이템 목록)에서는 다른 통계가 없으니 더 많이 보여준다. */
+private val HOLDINGS_LIST_HEIGHT = ROW_HEIGHT * 10
 
 @Composable
 fun HudOverlay(
     sessionState: StateFlow<SessionState>,
     priceState: StateFlow<com.mttd.data.prices.PriceRepository.State>? = null,
     onCollapse: () -> Unit,
-    onReset: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onTogglePause: () -> Unit = {},
+    onRefreshHoldings: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
     val prices = priceState?.collectAsStateWithLifecycle()?.value
@@ -111,83 +113,133 @@ fun HudOverlay(
                 Spacer(Modifier.fillMaxWidth().weight(1f))
                 HudMaterialIconButton(Icons.Filled.Settings, onOpenSettings)
                 Spacer(Modifier.width(3.dp))
-                HudMaterialIconButton(
-                    if (session.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                    onTogglePause,
-                )
-                Spacer(Modifier.width(3.dp))
-                HudMaterialIconButton(Icons.Filled.Refresh, onReset)
+                if (session.inExchange) {
+                    // 거래소 안에서는 pause 가 자동 제어라 수동 토글 버튼이 필요 없고,
+                    // 새로고침은 리셋이 아니라 보유 아이템 가치 재계산이어야 한다.
+                    HudMaterialIconButton(Icons.Filled.Refresh, onRefreshHoldings)
+                } else {
+                    // 리셋은 여기서 뺐다 — 오버레이는 작고 드래그 중에도 탭이 쉽게 튀어서
+                    // 확인 없는 되돌릴 수 없는 동작을 두기엔 위험하다. 리셋은 앱 쪽(확인 팝업 있음)에서만.
+                    HudMaterialIconButton(
+                        if (session.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                        onTogglePause,
+                    )
+                }
                 Spacer(Modifier.width(3.dp))
                 HudMaterialIconButton(Icons.Filled.Close, onCollapse)
             }
 
-            when {
-                prices != null && prices.loading -> Text(
-                    "💰 시세 정보 업데이트 중...",
-                    color = Color(0xFF60A5FA),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                // <= 1 : 100300 override 하나만 있는 "빈 시즌" 상태도 시세 없음으로 취급
-                prices != null && prices.itemsWithPrice <= 1 -> Text(
-                    "💰 시세 정보 없음",
-                    color = Color(0xFFCBD5E1),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                !session.baselineReady -> Text(
-                    "🎒 게임에서 로그 오픈 후 가방 정렬을 눌러주세요",
-                    color = Color(0xFFFBBF24),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-            HudStat("경과", formatElapsed(elapsed))
-            HudStat("총 수익", formatFire(session.totalValue) + " (${formatFire(session.netTotalValue)})")
-            HudStat("시간당", formatFire(incomePerHour) + "/h (${formatFire(netIncomePerHour)}/h)")
-            HudStat("맵 진입", "${session.mapsEntered}")
-
-            Spacer(Modifier.height(1.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "이번 맵",
-                    color = Color(0xFFCBD5E1),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.weight(1f))
-                // 이번 맵 수익 합계 (목록이 상위 N 개로 잘려도 합계는 전체 기준)
-                Text(
-                    formatFire(session.currentMapValue),
-                    color = when {
-                        session.currentMapValue < 0 -> Color(0xFFF87171)
-                        session.currentMapValue > 0 -> Color(0xFF4ADE80)
-                        else -> Color(0xFF94A3B8)
-                    },
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                )
-            }
-            if (session.recentPickups.isEmpty()) {
-                Text("(없음)", color = Color(0xFF94A3B8), fontSize = 10.sp)
+            if (session.inExchange) {
+                HoldingsBody(session.holdings)
             } else {
-                // 창 높이는 WRAP_CONTENT 라 목록이 짧으면 HUD 도 같이 작아진다.
-                // 길어질 때만 이 상한에서 멈추고 목록 안에서 스크롤.
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = MAX_LIST_HEIGHT)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                when {
+                    prices != null && prices.loading -> Text(
+                        "💰 시세 정보 업데이트 중...",
+                        color = Color(0xFF60A5FA),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    // <= 1 : 100300 override 하나만 있는 "빈 시즌" 상태도 시세 없음으로 취급
+                    prices != null && prices.itemsWithPrice <= 1 -> Text(
+                        "💰 시세 정보 없음",
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    !session.baselineReady -> Text(
+                        "🎒 게임에서 로그 오픈 후 가방 정렬을 눌러주세요",
+                        color = Color(0xFFFBBF24),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                HudStat("경과", formatElapsed(elapsed))
+                HudStat("총 수익", formatFire(session.totalValue) + " (${formatFire(session.netTotalValue)})")
+                HudStat("시간당", formatFire(incomePerHour) + "/h (${formatFire(netIncomePerHour)}/h)")
+                HudStat("맵 진입", "${session.mapsEntered}")
+
+                Spacer(Modifier.height(1.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    for (p in session.recentPickups) {
-                        PickupRow(p)
+                    Text(
+                        "이번 맵",
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    // 이번 맵 수익 합계 (목록이 상위 N 개로 잘려도 합계는 전체 기준)
+                    Text(
+                        formatFire(session.currentMapValue),
+                        color = when {
+                            session.currentMapValue < 0 -> Color(0xFFF87171)
+                            session.currentMapValue > 0 -> Color(0xFF4ADE80)
+                            else -> Color(0xFF94A3B8)
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+                if (session.recentPickups.isEmpty()) {
+                    Text("(없음)", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                } else {
+                    // 창 높이는 WRAP_CONTENT 라 목록이 짧으면 HUD 도 같이 작아진다.
+                    // 길어질 때만 이 상한에서 멈추고 목록 안에서 스크롤.
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = MAX_LIST_HEIGHT)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        for (p in session.recentPickups) {
+                            PickupRow(p)
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * 거래소 진입 시 수익 화면 대신 보이는 몸체 — 현재 보유 아이템을 가치순으로.
+ * [SessionAggregator.enterExchange] 가 진입 시점에 [SessionState.holdings] 를 채운다.
+ */
+@Composable
+private fun HoldingsBody(holdings: List<com.mttd.domain.models.PickupSummary>) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "🏪 보유 아이템 가치",
+            color = Color(0xFFFBBF24),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            formatFire(holdings.sumOf { it.value }),
+            color = Color(0xFFE2E8F0),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+        )
+    }
+    Spacer(Modifier.height(2.dp))
+    if (holdings.isEmpty()) {
+        Text("(보유 아이템 없음)", color = Color(0xFF94A3B8), fontSize = 10.sp)
+    } else {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = HOLDINGS_LIST_HEIGHT)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            for (p in holdings) {
+                PickupRow(p)
             }
         }
     }

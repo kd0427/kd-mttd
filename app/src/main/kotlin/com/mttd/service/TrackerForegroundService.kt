@@ -117,6 +117,9 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     }
     fun togglePause() = aggregator.togglePause()
 
+    /** "가치" 탭/거래소 HUD 의 수동 새로고침 버튼에서 호출. */
+    fun refreshHoldings() = aggregator.refreshHoldings()
+
     /**
      * 잘못 집계된 회차 삭제. 세션 총합·아이템 합계도 남은 회차 기준으로 재계산된다.
      * 완료된 회차의 아이템 목록은 디스크에 있으므로 먼저 읽어와서 차감분을 넘긴다.

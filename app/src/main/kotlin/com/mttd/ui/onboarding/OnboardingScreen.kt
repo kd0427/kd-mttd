@@ -64,6 +64,7 @@ import kotlinx.coroutines.withContext
 
 private enum class MainTab(val label: String) {
     EARNINGS("수익"),
+    VALUE("가치"),
     SETTINGS("설정"),
 }
 
@@ -159,6 +160,9 @@ fun OnboardingScreen(
                         EarningsSummaryCard()
                         RunHistorySection()
                         PriceSummaryLine()
+                    }
+                    MainTab.VALUE -> {
+                        ValueScreen()
                     }
                     MainTab.SETTINGS -> {
                         ShizukuStatusCard(state = state, onRequestPermission = onRequestPermission)
@@ -288,15 +292,26 @@ private fun EarningsSummaryCard() {
                 }
                 Spacer(Modifier.width(8.dp))
                 var confirmReset by remember { mutableStateOf(false) }
+                OutlinedButton(onClick = { confirmReset = true }, enabled = service != null) {
+                    Text("리셋")
+                }
                 if (confirmReset) {
-                    TextButton(onClick = { confirmReset = false }) { Text("취소") }
-                    TextButton(onClick = { confirmReset = false; service?.resetSession() }) {
-                        Text("리셋 확인", color = Color(0xFFF87171))
-                    }
-                } else {
-                    OutlinedButton(onClick = { confirmReset = true }, enabled = service != null) {
-                        Text("리셋")
-                    }
+                    // 같은 자리에서 버튼만 바뀌는 인라인 확인은 빠르게 두 번 탭하면
+                    // 바뀐 자리의 "확인"이 그대로 눌려버릴 수 있어 별도 팝업으로 분리.
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { confirmReset = false },
+                        title = { Text("세션을 리셋할까요?") },
+                        text = { Text("지금까지 집계된 수익·회차 기록이 모두 사라집니다.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                confirmReset = false
+                                service?.resetSession()
+                            }) { Text("리셋", color = Color(0xFFF87171)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { confirmReset = false }) { Text("취소") }
+                        },
+                    )
                 }
             }
             if (session.paused) {

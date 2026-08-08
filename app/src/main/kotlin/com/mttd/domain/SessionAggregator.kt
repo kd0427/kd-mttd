@@ -53,6 +53,7 @@ class SessionAggregator(
         currentRunId = -1
         currentRunMapName = null
         nextRunId = 1
+        pausedByExchange = false
     }
 
     fun pauseSession() {
@@ -79,6 +80,71 @@ class SessionAggregator(
         if (_state.value.paused) resumeSession() else pauseSession()
     }
 
+    /** 거래소 진입 시 우리가 자동으로 걸었던 pause 인지 — 유저가 직접 pause 한 건 우리가 안 푼다. */
+    private var pausedByExchange = false
+
+    private fun enterExchange() {
+        if (_state.value.inExchange) return
+        if (!_state.value.paused) {
+            pauseSession()
+            pausedByExchange = true
+        }
+        _state.update { it.copy(inExchange = true) }
+        refreshHoldings()
+    }
+
+    private fun exitExchange() {
+        if (!_state.value.inExchange) return
+        _state.update { it.copy(inExchange = false) }
+        if (pausedByExchange) {
+            resumeSession()
+            pausedByExchange = false
+        }
+    }
+
+    /** 현재 보유 아이템을 가치 내림차순으로 재계산해 state 에 반영. 수동 새로고침에서도 호출. */
+    fun refreshHoldings() {
+        _state.update { it.copy(holdings = computeHoldings()) }
+    }
+
+    /**
+     * [slotLastCount] (슬롯별 절대 수량) 를 itemId 기준으로 합산해 가치순으로 정렬.
+     * 이름을 모르는 아이템(item_names_ko.json 에 없음)은 노이즈라 제외하고,
+     * 표시량도 상위 [MAX_HOLDINGS] 개로 제한한다.
+     */
+    private fun computeHoldings(): List<PickupSummary> {
+        val totals = HashMap<String, Int>()
+        for ((slotKey, qty) in slotLastCount) {
+            if (qty <= 0) continue
+            val itemId = extractItemId(slotKey) ?: continue
+            totals[itemId] = (totals[itemId] ?: 0) + qty
+        }
+        return totals.mapNotNull { (itemId, qty) ->
+            val info = itemInfo.lookup(itemId)
+            val name = info?.name?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val v = valueCalculator?.compute(itemId, qty)
+            PickupSummary(
+                timestampMs = System.currentTimeMillis(),
+                action = "Holding",
+                itemId = itemId,
+                itemName = name,
+                itemType = info.type,
+                iconUrl = info.img.takeIf { it.isNotBlank() },
+                quantity = qty,
+                unitPrice = v?.unitPrice ?: 0f,
+                value = v?.totalValue ?: 0.0,
+                netValue = v?.netValue ?: 0.0,
+            )
+        }.sortedByDescending { it.value }.take(MAX_HOLDINGS)
+    }
+
+    /** 슬롯 키 두 형태 모두 처리: `<baseId>_<uuid>` 또는 fallback `page:slot:itemId`. */
+    private fun extractItemId(slotKey: String): String? {
+        if (slotKey.contains(':')) return slotKey.substringAfterLast(':')
+        val underscoreIdx = slotKey.indexOf('_')
+        return if (underscoreIdx > 0) slotKey.substring(0, underscoreIdx) else null
+    }
+
     // 모바일 로그에서 뽑을 수 있는 필드 정규식들.
     private val levelInfoRegex = Regex("""LevelUid,\s*LevelType,\s*LevelId\s*=\s*(\d+)\s+(\d+)\s+(\d+)""")
 
@@ -92,6 +158,20 @@ class SessionAggregator(
      */
     private val slotLineRegex = Regex(
         """ItemChange@\s+(?:Update|Add)\s+Id=(\S+)\s+BagNum=(\d+)\s+in\s+PageId=(\d+)\s+SlotId=(\d+)"""
+    )
+    /**
+     * 슬롯 전체 제거 — count 없이 `Delete` 만 찍힌다 (경매 등록, 장비 분해 등).
+     * `Update`/`Add` 처럼 다음 줄 Modfy 를 기다릴 필요가 없다: Delete 자체가 이미 확정된
+     * "이 슬롯 count=0" 이벤트라 바로 [handleModfy] 로 넘긴다.
+     *
+     * 실기기 로그 확인(2026-08-08, 경매장 판매 등록):
+     *   ItemChange@ ProtoName=XchgForSale start
+     *   ItemChange@ Delete Id=400008_<uuid> in PageId=103 SlotId=4
+     *   BagMgr@:RemoveBagItem PageId = 103 SlotId = 4
+     *   ItemChange@ ProtoName=XchgForSale end
+     */
+    private val slotDeleteRegex = Regex(
+        """ItemChange@\s+Delete\s+Id=(\S+)\s+in\s+PageId=(\d+)\s+SlotId=(\d+)"""
     )
     // 실제 픽업 이벤트: BagMgr@:Modfy BagItem PageId = X SlotId = Y ConfigBaseId = Z Num = N
     private val modfyRegex = Regex("""BagMgr@:Modfy\s+BagItem\s+PageId\s*=\s*(\d+)\s+SlotId\s*=\s*(\d+)\s+ConfigBaseId\s*=\s*(\d+)\s+Num\s*=\s*(\d+)""")
@@ -135,6 +215,16 @@ class SessionAggregator(
      * OnEnterAreaBegin 이 오기 때문에 소비 항목이 화면에 뜨기도 전에 지워졌다.
      */
     private val mapOpenStartRegex = Regex("""ItemChange@\s+ProtoName=Spv3Open\s+start""")
+
+    /**
+     * 거래소(경매장, AuctionHouseV2) 화면 진입/퇴장. `ItemChange@` 블록이 아니라 UI 페이지
+     * 전환 로그라 별도 마커. 실기기 로그 캡처로 확인 (2026-08-08, 2회 진입/퇴장 모두 일치):
+     *   TipMsgShowMgr@DispatchPageRunChange PageName = AuctionHouseV2 , PageRunState = Run
+     *   TipMsgShowMgr@DispatchPageRunChange PageName = AuctionHouseV2 , PageRunState = Destory
+     * "Destory" 는 게임 로그 원문의 오타 — 실제로 그렇게 찍힌다.
+     */
+    private val exchangeEnterRegex = Regex("""PageName\s*=\s*AuctionHouseV2\s*,\s*PageRunState\s*=\s*Run""")
+    private val exchangeExitRegex = Regex("""PageName\s*=\s*AuctionHouseV2\s*,\s*PageRunState\s*=\s*Destory""")
 
     private enum class BlockContext { NONE, PICKUP, CONSUME }
     private var blockContext: BlockContext = BlockContext.NONE
@@ -263,6 +353,10 @@ class SessionAggregator(
             consumeEndRegex.containsMatchIn(line) -> blockContext = BlockContext.NONE
         }
 
+        // 거래소 진입/퇴장 — 파밍 집계와 무관한 UI 전환이므로 다른 파싱과 독립적으로 처리.
+        if (exchangeEnterRegex.containsMatchIn(line)) { enterExchange(); return }
+        if (exchangeExitRegex.containsMatchIn(line)) { exitExchange(); return }
+
         // 맵 열기 = 새 런 시작. 이 직후의 소비(마이너스) 항목부터 "이번 진입" 에 쌓인다.
         if (mapOpenStartRegex.containsMatchIn(line)) startNewRun()
 
@@ -281,8 +375,26 @@ class SessionAggregator(
             val bagNum = slot.groupValues[2].toIntOrNull()
             val pageId = slot.groupValues[3]
             val slotId = slot.groupValues[4]
-            slotKeyByPosition["$pageId:$slotId"] = key
+            updatePositionKey(pageId, slotId, key)
             if (bagNum != null) pendingSlot = PendingSlot(key, pageId, slotId, bagNum)
+            return
+        }
+
+        // A2) Delete → 슬롯 전체 제거. count=0 으로 확정이라 lookahead 없이 바로 처리.
+        val del = slotDeleteRegex.find(line)
+        if (del != null) {
+            flushPendingSlotAsBaseline()
+            val key = del.groupValues[1]
+            val pageId = del.groupValues[2]
+            val slotId = del.groupValues[3]
+            val itemId = extractItemId(key) ?: key
+            handleModfy(
+                slotUuid = key,
+                itemId = itemId,
+                pageId = pageId,
+                totalCountInSlot = 0,
+                timestampMs = System.currentTimeMillis(),
+            )
             return
         }
 
@@ -350,13 +462,15 @@ class SessionAggregator(
      * - `----Socket`   — 경매장 조회 블록 시작·끝
      * - `MapName`      — 맵 코드네임
      * - `OnEnterArea`  — 맵 진입
+     * - `AuctionHouseV2` — 거래소 화면 진입/퇴장
      */
     private fun isInteresting(line: String): Boolean =
         line.contains("ItemChange@") ||
         line.contains("BagMgr@:") ||
         line.contains("----Socket") ||
         line.contains("MapName") ||
-        line.contains("OnEnterArea")
+        line.contains("OnEnterArea") ||
+        line.contains("AuctionHouseV2")
 
     /**
      * 경매장 시세 조회(`XchgSearchPrice`) 블록 처리.
@@ -448,8 +562,33 @@ class SessionAggregator(
      */
     private fun resolveSlotKey(pageId: String, slotId: String, itemId: String): String {
         val indexed = slotKeyByPosition["$pageId:$slotId"]
-        return if (indexed != null && indexed.startsWith("${itemId}_")) indexed
-               else "$pageId:$slotId:$itemId"
+        val key = if (indexed != null && indexed.startsWith("${itemId}_")) indexed
+                  else "$pageId:$slotId:$itemId"
+        updatePositionKey(pageId, slotId, key)
+        return key
+    }
+
+    /**
+     * `PageId:SlotId` 포지션의 현재 점유 키를 갱신한다.
+     *
+     * 한 포지션은 항상 하나의 키만 점유해야 하는데, uuid 직접 파싱 경로(케이스 A)와
+     * [resolveSlotKey] 의 합성 키 fallback 경로가 **같은 물리 슬롯을 서로 다른 키 문자열로**
+     * 기록할 수 있다 (예: 최초 스냅샷 때는 fallback 합성 키로 잡혔다가, 이후 실거래 이벤트는
+     * 항상 uuid 키로 옴). 두 키가 [slotLastCount] 에 각각 남아있으면 [computeHoldings] 의
+     * itemId 합산에서 같은 물리 아이템이 이중으로 잡힌다 (실측: 8개 보유 중 1개 구매 → 9개가
+     * 아니라 17개=8+9 로 표시되는 버그의 원인).
+     *
+     * 그래서 점유 키가 바뀌면 이전 키는 이 포지션을 더 이상 대표하지 않는다고 보고 0 으로
+     * 무효화한다 — 그 아이템이 실제로 다른 슬롯으로 옮겨간 경우엔 그 슬롯의 Update 라인이
+     * (같은 배치 안에서) 다시 정확한 수량으로 채워준다.
+     */
+    private fun updatePositionKey(pageId: String, slotId: String, newKey: String) {
+        val posKey = "$pageId:$slotId"
+        val oldKey = slotKeyByPosition[posKey]
+        if (oldKey != null && oldKey != newKey) {
+            slotLastCount[oldKey] = 0
+        }
+        slotKeyByPosition[posKey] = newKey
     }
 
     /** 대기 중인 슬롯 라인을 baseline 으로 확정 (변화 이벤트가 아니었다는 뜻). */
@@ -617,6 +756,9 @@ class SessionAggregator(
         // slotLastCount 는 계속 최신값 유지해야 resume 후 다음 Modfy delta 가 정확.
         if (_state.value.paused) {
             slotLastCount[slotUuid] = totalCountInSlot
+            // 거래소 안이면(구매/판매 등록/취소로 슬롯이 바뀔 때마다) 수동 새로고침 없이도
+            // 보유 아이템 가치가 바로 최신으로 보이게 즉시 재계산한다.
+            if (_state.value.inExchange) refreshHoldings()
             return
         }
 
@@ -787,6 +929,8 @@ class SessionAggregator(
         private const val MAX_XCHG_BLOCK_LINES = 400
         /** 보관할 최대 회차 수. 넘으면 오래된 것부터 버린다. */
         private const val MAX_RUNS = 200
+        /** "가치" 탭/HUD 에 보여줄 최대 보유 아이템 종류 수 (가치 내림차순으로 자름). */
+        private const val MAX_HOLDINGS = 50
         const val MAX_TIME_SAMPLES = 60   // 1분당 1점 × 60 = 최근 1시간
     }
 }

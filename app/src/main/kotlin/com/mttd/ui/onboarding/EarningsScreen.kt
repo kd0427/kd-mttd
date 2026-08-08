@@ -45,12 +45,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.mttd.TrackerApplication
 import com.mttd.domain.models.MapRun
 import com.mttd.domain.models.PickupSummary
+import com.mttd.domain.models.SessionState
 import com.mttd.ui.overlay.formatFire
+import kotlinx.coroutines.flow.MutableStateFlow
 
 private val POSITIVE = Color(0xFF4ADE80)
 private val NEGATIVE = Color(0xFFF87171)
@@ -345,6 +350,61 @@ fun TotalItemsCard(merged: List<PickupSummary>) {
             } else {
                 ItemRowHeader()
                 for (p in merged) ItemRow(p)
+            }
+        }
+    }
+}
+
+/**
+ * "가치" 탭 — 현재 보유 아이템을 가치 내림차순으로 표시.
+ *
+ * 거래소(경매장) 진입 시 [com.mttd.domain.SessionAggregator.enterExchange] 가 자동으로
+ * 갱신하고, 여기서는 수동 새로고침 버튼만 노출한다. 슬롯 상태(`slotLastCount`)는 항상
+ * 최신이므로 "새로고침" 은 서버 재조회가 아니라 그 시점 스냅샷을 다시 계산하는 것.
+ */
+@Composable
+fun ValueScreen() {
+    val context = LocalContext.current
+    val app = context.applicationContext as TrackerApplication
+    val service by app.trackerService.collectAsStateWithLifecycle()
+    val session by (service?.sessionState ?: MutableStateFlow(SessionState()))
+        .collectAsStateWithLifecycle()
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("보유 아이템 가치", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "${session.holdings.size}종 · ${formatFire(session.holdings.sumOf { it.value })}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                OutlinedButton(
+                    onClick = { service?.refreshHoldings() },
+                    enabled = service != null,
+                ) { Text("새로고침") }
+            }
+            if (session.inExchange) {
+                Text(
+                    "🏪 거래소 화면이 열려있어 집계가 일시정지되었습니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+            HorizontalDivider()
+            if (session.holdings.isEmpty()) {
+                Text(
+                    "(거래소에 들어가거나 새로고침을 누르면 보유 아이템이 표시됩니다)",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                ItemRowHeader()
+                for (p in session.holdings) ItemRow(p)
             }
         }
     }

@@ -122,9 +122,6 @@ class OverlayHost(
                 sessionState = sessionState,
                 priceState = priceState,
                 onCollapse = { hideHud() },
-                onReset = {
-                    com.mttd.TrackerApplication.instance.trackerService.value?.resetSession()
-                },
                 onOpenSettings = {
                     val i = android.content.Intent(context, com.mttd.MainActivity::class.java)
                         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -132,6 +129,9 @@ class OverlayHost(
                 },
                 onTogglePause = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.togglePause()
+                },
+                onRefreshHoldings = {
+                    com.mttd.TrackerApplication.instance.trackerService.value?.refreshHoldings()
                 },
             )
         }

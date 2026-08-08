@@ -98,19 +98,19 @@ fun OnboardingScreen(
                 .padding(safePadding),
         ) {
             Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
-                Row(verticalAlignment = Alignment.Bottom) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "mTTD",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
                     )
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = "v${com.mttd.BuildConfig.VERSION_NAME}",
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.weight(1f))
                     UpdateCheckButton()
                 }
                 Text(

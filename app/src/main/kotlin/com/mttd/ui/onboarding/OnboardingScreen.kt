@@ -23,7 +23,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Tab
@@ -108,9 +107,10 @@ fun OnboardingScreen(
                     )
                     Text(
                         text = "v${com.mttd.BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    Spacer(Modifier.width(8.dp))
                     UpdateCheckButton()
                 }
                 Text(
@@ -859,9 +859,11 @@ private fun formatUpdatedAgo(ms: Long): String {
 }
 
 /**
- * 버전 표시 옆의 업데이트 재확인 아이콘 버튼. 서비스가 시작 시 1 회 자동으로 확인하긴
- * 하지만, 앱을 오래 켜둔 채로 새 버전이 올라오면 재시작 전엔 알 방법이 없었다. 새 버전이
- * 있으면 이미 떠 있는 [UpdateBanner] 가 같은 상태를 구독하고 있어 알아서 나타난다.
+ * 버전 표시 옆의 업데이트 재확인 버튼. 서비스가 시작 시 1 회 자동으로 확인하긴 하지만,
+ * 앱을 오래 켜둔 채로 새 버전이 올라오면 재시작 전엔 알 방법이 없었다. 새 버전이 있으면
+ * 이미 떠 있는 [UpdateBanner] 가 같은 상태를 구독하고 있어 알아서 나타난다.
+ *
+ * 아이콘 하나만 있을 땐 눈에 잘 안 띈다는 피드백을 받아 텍스트 라벨이 있는 버튼으로 바꿨다.
  */
 @Composable
 private fun UpdateCheckButton() {
@@ -871,9 +873,9 @@ private fun UpdateCheckButton() {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
 
-    IconButton(
+    OutlinedButton(
         onClick = {
-            val svc = service ?: return@IconButton
+            val svc = service ?: return@OutlinedButton
             checking = true
             scope.launch {
                 svc.checkForUpdate()
@@ -881,18 +883,18 @@ private fun UpdateCheckButton() {
             }
         },
         enabled = service != null && !checking,
-        modifier = Modifier.size(28.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
     ) {
         if (checking) {
             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
         } else {
-            Icon(
-                Icons.Filled.Refresh,
-                contentDescription = "업데이트 확인",
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
         }
+        Spacer(Modifier.width(6.dp))
+        Text(
+            if (checking) "확인 중..." else "업데이트 확인",
+            style = MaterialTheme.typography.labelMedium,
+        )
     }
 }
 

@@ -211,7 +211,10 @@ fun RunBarChart(
             runs.forEach { run ->
                 Text(
                     "${run.index}",
-                    modifier = Modifier.width(barW).padding(end = gap),
+                    // padding 이 먼저(바깥) 와야 이 라벨의 전체 폭이 barW+gap 이 되어 막대 슬롯
+                    // 폭(slotPx)과 맞는다. width 를 먼저 적용하면 padding 이 barW 안쪽으로
+                    // 먹혀버려서(전체 폭이 barW 로만 잡힘) 라벨이 뒤로 갈수록 막대에서 밀렸었다.
+                    modifier = Modifier.padding(end = gap).width(barW),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (run.id == selectedId) SELECTED

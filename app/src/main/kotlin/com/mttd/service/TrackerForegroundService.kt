@@ -81,16 +81,19 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         _availableUpdate.asStateFlow()
 
     /**
-     * 업데이트 확인 — **앱(서비스 프로세스) 시작 시 1 회만.** 주기적으로 돌지 않는다.
+     * 업데이트 확인. 서비스 시작 시 [checkForUpdateOnce] 로 1 회 자동 호출되고, 설정 탭의
+     * "업데이트 확인" 버튼으로 수동으로도 부를 수 있다 (그래서 public + suspend).
      *
      * 알림만 하고 설치는 하지 않는다. 자동 설치를 하려면 `REQUEST_INSTALL_PACKAGES` 를 받거나
      * Shizuku 로 `pm install` 을 돌려야 하는데, [UserService] 를 읽기 전용으로 유지하는 게
      * 이 앱의 원칙이라 그 경로는 열지 않는다.
      */
+    suspend fun checkForUpdate() {
+        _availableUpdate.value = com.mttd.data.update.UpdateChecker().check()
+    }
+
     private fun checkForUpdateOnce() {
-        lifecycleScope.launch {
-            _availableUpdate.value = com.mttd.data.update.UpdateChecker().check()
-        }
+        lifecycleScope.launch { checkForUpdate() }
     }
 
 

@@ -13,11 +13,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Tab
@@ -105,6 +111,7 @@ fun OnboardingScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    UpdateCheckButton()
                 }
                 Text(
                     text = "Torchlight: Infinite 세션 트래커",
@@ -848,6 +855,44 @@ private fun formatUpdatedAgo(ms: Long): String {
         s < 60 -> "${s}초 전"
         s < 3600 -> "${s / 60}분 전"
         else -> "${s / 3600}시간 ${(s % 3600) / 60}분 전"
+    }
+}
+
+/**
+ * 버전 표시 옆의 업데이트 재확인 아이콘 버튼. 서비스가 시작 시 1 회 자동으로 확인하긴
+ * 하지만, 앱을 오래 켜둔 채로 새 버전이 올라오면 재시작 전엔 알 방법이 없었다. 새 버전이
+ * 있으면 이미 떠 있는 [UpdateBanner] 가 같은 상태를 구독하고 있어 알아서 나타난다.
+ */
+@Composable
+private fun UpdateCheckButton() {
+    val context = LocalContext.current
+    val app = context.applicationContext as TrackerApplication
+    val service by app.trackerService.collectAsStateWithLifecycle()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+
+    IconButton(
+        onClick = {
+            val svc = service ?: return@IconButton
+            checking = true
+            scope.launch {
+                svc.checkForUpdate()
+                checking = false
+            }
+        },
+        enabled = service != null && !checking,
+        modifier = Modifier.size(28.dp),
+    ) {
+        if (checking) {
+            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(
+                Icons.Filled.Refresh,
+                contentDescription = "업데이트 확인",
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

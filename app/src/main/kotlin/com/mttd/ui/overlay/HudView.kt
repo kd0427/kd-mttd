@@ -64,7 +64,6 @@ private val MAX_LIST_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS
 fun HudOverlay(
     sessionState: StateFlow<SessionState>,
     priceState: StateFlow<com.mttd.data.prices.PriceRepository.State>? = null,
-    pollStatus: StateFlow<com.mttd.data.log.LogPoller.PollingStatus>? = null,
     onCollapse: () -> Unit,
     onReset: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
@@ -72,8 +71,6 @@ fun HudOverlay(
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
     val prices = priceState?.collectAsStateWithLifecycle()?.value
-    val poll = pollStatus?.collectAsStateWithLifecycle()?.value
-    val logNotGrowing = poll != null && poll.active && !session.logActivityDetected
 
     // 시간이 실제로 흐를 때만 1 초 틱을 돌린다 (일시정지·집계 대기 중엔 정지).
     val ticking = session.active && !session.paused && session.baselineReady
@@ -138,14 +135,8 @@ fun HudOverlay(
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
-                !session.baselineReady && logNotGrowing -> Text(
-                    "📡 게임에서 로그 오픈을 했는지 확인해주세요",
-                    color = Color(0xFFF87171),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
                 !session.baselineReady -> Text(
-                    "🎒 게임에서 가방 정렬을 눌러주세요",
+                    "🎒 게임에서 로그 오픈 후 가방 정렬을 눌러주세요",
                     color = Color(0xFFFBBF24),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,

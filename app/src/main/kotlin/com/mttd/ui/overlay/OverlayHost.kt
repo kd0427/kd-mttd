@@ -49,7 +49,6 @@ class OverlayHost(
     private val savedStateOwner: SavedStateRegistryOwner,
     private val sessionState: StateFlow<SessionState>,
     private val priceState: StateFlow<com.mttd.data.prices.PriceRepository.State>,
-    private val pollStatus: StateFlow<com.mttd.data.log.LogPoller.PollingStatus>,
     private val prefs: OverlayPrefs,
 ) : ViewModelStoreOwner {
 
@@ -122,7 +121,6 @@ class OverlayHost(
             HudOverlay(
                 sessionState = sessionState,
                 priceState = priceState,
-                pollStatus = pollStatus,
                 onCollapse = { hideHud() },
                 onReset = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.resetSession()

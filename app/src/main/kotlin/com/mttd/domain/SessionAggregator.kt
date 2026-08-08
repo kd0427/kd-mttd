@@ -42,7 +42,6 @@ class SessionAggregator(
             active = true,
             startedAtMs = System.currentTimeMillis(),
             baselineReady = false,   // 다시 가방 정렬 관측할 때까지 계산 대기
-            logActivityDetected = logActivitySeen,   // 리셋과 무관 — 이미 확인된 사실은 유지
         )
         slotLastCount.clear()
         slotKeyByPosition.clear()
@@ -219,12 +218,6 @@ class SessionAggregator(
     private val slotLastCount = HashMap<String, Int>()
 
     /**
-     * 실제 게임 이벤트 라인을 한 번이라도 봤는지. [resetSession] 으로도 리셋하지 않는다 —
-     * "로그 파이프라인이 살아있다" 는 사실은 세션(수익 통계) 리셋과 별개다.
-     */
-    private var logActivitySeen = false
-
-    /**
      * Assembler 에서 완성된 메시지를 소비.
      *
      * 헤더 종류 별로 분기:
@@ -258,15 +251,6 @@ class SessionAggregator(
         // 경매장 블록(RECV) 안에서는 `|  +12 [3.0]` 같은 연속 줄에 키워드가 없으므로
         // 필터를 건너뛰어야 한다.
         if (xchgMode == XchgMode.NONE && !isInteresting(line)) return
-
-        // "로그 오픈을 했는지" UI 안내가 쓰는 신호. 처음엔 isInteresting() 통과만으로 판정했는데
-        // 그것도 너무 일렀다 — MapName/----Socket 은 로그인 화면·메뉴 단계에서도 바로 찍혀서
-        // (LogPoller 의 파일 크기 증가 신호와 똑같은 문제). 인벤토리에 실제로 손을 댄 뒤에만
-        // 나오는 ItemChange@/BagMgr@: 라인으로 기준을 좁힌다.
-        if (!logActivitySeen && (line.contains("ItemChange@") || line.contains("BagMgr@:"))) {
-            logActivitySeen = true
-            _state.update { it.copy(logActivityDetected = true) }
-        }
 
         // 경매장 조회 블록 안이면 그쪽에서 소비. (블록은 짧고 다른 이벤트가 끼지 않는다)
         if (consumeXchgLine(line)) return

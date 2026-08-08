@@ -249,8 +249,6 @@ private fun EarningsSummaryCard() {
     val service by app.trackerService.collectAsStateWithLifecycle()
     val session by (service?.sessionState ?: MutableStateFlow(SessionState()))
         .collectAsStateWithLifecycle()
-    val pollStatus by (service?.status ?: MutableStateFlow(LogPoller.PollingStatus()))
-        .collectAsStateWithLifecycle()
 
     val ticking = session.active && !session.paused && session.baselineReady
     var tick by remember { mutableStateOf(0) }
@@ -312,19 +310,11 @@ private fun EarningsSummaryCard() {
                 MiniStat("픽업", "${session.pickupCount}")
             }
             if (!session.baselineReady) {
-                if (pollStatus.active && !session.logActivityDetected) {
-                    Text(
-                        "📡 게임 로그가 갱신되지 않고 있습니다 — 게임에서 로그 오픈을 했는지 확인해주세요.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                } else {
-                    Text(
-                        "🎒 게임에서 가방 정렬을 눌러야 집계가 시작됩니다.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
+                Text(
+                    "🎒 게임에서 로그 오픈 후 가방 정렬을 눌러주세요.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
             }
         }
     }

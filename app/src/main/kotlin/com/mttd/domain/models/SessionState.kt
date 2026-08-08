@@ -57,21 +57,6 @@ data class SessionState(
      */
     val baselineReady: Boolean = false,
 
-    /**
-     * 로그에서 인벤토리 관련 라인(`ItemChange@`, `BagMgr@:`)을 한 번이라도 관측했는지.
-     *
-     * `MapName`/`----Socket` 등 다른 관심 라인은 로그인 화면·메뉴 단계에서도 바로 찍혀서
-     * "의미 있는 활동"의 기준으로 쓰기엔 너무 이르다 — 인벤토리에 실제로 손을 댄 뒤에만
-     * 나오는 라인으로 좁혔다.
-     *
-     * 게임은 대기 상태에서도 TCP Ping 으로 로그 파일 크기 자체는 계속 늘어나므로
-     * (`LogPoller.PollingStatus.gameLikelyRunning`), "로그 파일이 자라고 있다" 만으로는
-     * "게임에서 로그 오픈을 했다" 는 신호로 쓰기 부족하다 — 게임을 켜기만 해도 Ping 때문에
-     * 몇 초 안에 참이 되어 버려서, 정작 의미 있는 이벤트가 하나도 안 쌓였는데 안내 문구가
-     * 사라지는 문제가 있었다. 이 플래그는 실제 게임 이벤트 라인이 최소 하나 보였는지를 본다.
-     */
-    val logActivityDetected: Boolean = false,
-
     /** 사용자 일시정지 상태. true 이면 경과 시간·픽업·수익 계산 일시 중단. */
     val paused: Boolean = false,
     /** 지금까지 누적된 일시정지 시간 (ms). elapsedMs 계산에서 빼줌. */

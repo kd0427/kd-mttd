@@ -211,7 +211,6 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
                 savedStateOwner = this,
                 sessionState = aggregator.state,
                 priceState = priceRepo.state,
-                pollStatus = status,
                 prefs = overlayPrefs,
             ).also { it.attach() }
         }

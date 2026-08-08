@@ -132,7 +132,10 @@ fun RunBarChart(
                     Text(
                         formatAxis(v),
                         modifier = Modifier.align(Alignment.TopEnd)
-                            .padding(top = (chartH * (zeroFrac - frac * zeroFrac)) - 6.dp, end = 4.dp),
+                            .padding(
+                                top = ((chartH * (zeroFrac - frac * zeroFrac)) - 6.dp).coerceAtLeast(0.dp),
+                                end = 4.dp,
+                            ),
                         style = MaterialTheme.typography.labelSmall,
                         color = gridLabelColor,
                         maxLines = 1,

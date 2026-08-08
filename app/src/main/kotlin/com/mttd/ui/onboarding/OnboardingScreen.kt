@@ -4,8 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,10 +78,19 @@ fun OnboardingScreen(
     val context = LocalContext.current
 
     Scaffold { padding ->
+        // 일부 기기(멀티윈도우/프리폼 모드 등)가 인셋을 음수로 내려주는 경우가 있어
+        // Modifier.padding() 이 "Padding must be non-negative" 로 즉시 크래시한다 — 방어적으로 clamp.
+        val layoutDirection = LocalLayoutDirection.current
+        val safePadding = PaddingValues(
+            start = padding.calculateStartPadding(layoutDirection).coerceAtLeast(0.dp),
+            top = padding.calculateTopPadding().coerceAtLeast(0.dp),
+            end = padding.calculateEndPadding(layoutDirection).coerceAtLeast(0.dp),
+            bottom = padding.calculateBottomPadding().coerceAtLeast(0.dp),
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(safePadding),
         ) {
             Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
                 Row(verticalAlignment = Alignment.Bottom) {

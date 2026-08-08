@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 디버그 빌드 전용 — 실기기에서 release 버전과 한눈에 구분되도록 배경을 반전(주황)한다. -->
+    <color name="ic_launcher_background">#FB923C</color>
+</resources>

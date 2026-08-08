@@ -32,3 +32,6 @@ package-lock.json
 keystore.properties
 
 phase0/
+
+# Claude Code agent worktrees/state — local tooling artifacts, not project source
+.claude/

@@ -73,7 +73,7 @@ fun HudOverlay(
     val session by sessionState.collectAsStateWithLifecycle()
     val prices = priceState?.collectAsStateWithLifecycle()?.value
     val poll = pollStatus?.collectAsStateWithLifecycle()?.value
-    val logNotGrowing = poll != null && poll.active && !poll.gameLikelyRunning()
+    val logNotGrowing = poll != null && poll.active && !session.logActivityDetected
 
     // 시간이 실제로 흐를 때만 1 초 틱을 돌린다 (일시정지·집계 대기 중엔 정지).
     val ticking = session.active && !session.paused && session.baselineReady

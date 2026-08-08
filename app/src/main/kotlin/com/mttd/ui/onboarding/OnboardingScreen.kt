@@ -312,7 +312,7 @@ private fun EarningsSummaryCard() {
                 MiniStat("픽업", "${session.pickupCount}")
             }
             if (!session.baselineReady) {
-                if (pollStatus.active && !pollStatus.gameLikelyRunning()) {
+                if (pollStatus.active && !session.logActivityDetected) {
                     Text(
                         "📡 게임 로그가 갱신되지 않고 있습니다 — 게임에서 로그 오픈을 했는지 확인해주세요.",
                         style = MaterialTheme.typography.bodySmall,

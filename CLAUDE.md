@@ -47,6 +47,24 @@ release or Android won't recognize it as an update, and the in-app update checke
 `keystore.properties` (git-ignored) supplies signing credentials; without it release builds are
 unsigned.
 
+### Commit message convention (drives release notes)
+
+Prefix every commit subject with one of these tags so release notes can be generated
+mechanically instead of judgment-called each time:
+
+- `feat:` — new user-facing feature or behavior change
+- `fix:` — user-facing bug fix
+- `chore:` — data/config updates with no code behavior change (e.g. `item_names_ko.json` refresh,
+  version bump)
+- `refactor:` — internal restructuring, no user-visible effect
+- `style:` — cosmetic/UI polish that isn't a functional fix (spacing, alignment, colors)
+- `docs:` — README/INSTALL/CLAUDE.md only
+
+**When drafting release notes, only `feat:` and `fix:` commits go in the user-facing list.**
+`chore:`/`refactor:`/`style:`/`docs:` commits are left out of the notes shown to users — they
+still exist in git history for developers, just not surfaced as "what's new." Always show the
+drafted notes to the user for approval before actually publishing a release (`gh release create`).
+
 ## Architecture
 
 ### The core pipeline: log line → parsed event → aggregated session state

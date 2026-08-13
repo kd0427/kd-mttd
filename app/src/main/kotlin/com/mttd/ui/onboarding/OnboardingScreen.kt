@@ -71,6 +71,7 @@ private enum class MainTab(val label: String) {
     EARNINGS("수익"),
     VALUE("가치"),
     SETTINGS("설정"),
+    DESIGN("미리보기"),
 }
 
 /**
@@ -187,6 +188,7 @@ fun OnboardingScreen(
                         TextButton(onClick = onReopenWizard) { Text("설정 가이드 다시 보기") }
                         ExitCard()
                     }
+                    MainTab.DESIGN -> DesignPreviewScreen()
                 }
             }
         }

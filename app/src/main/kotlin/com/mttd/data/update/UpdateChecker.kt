@@ -36,13 +36,14 @@ class UpdateChecker {
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * @return 새 버전이 있으면 [Update], 최신이면 null.
-     *         네트워크 실패 등은 null 로 삼킨다 (업데이트 확인 실패로 앱을 방해하지 않음).
+     * @return 최신 여부 또는 실패 원인을 구분해 반환한다.
      */
-    suspend fun check(): Update? = withContext(Dispatchers.IO) {
+    suspend fun check(): CheckResult = withContext(Dispatchers.IO) {
         // 이 커스텀 포크는 원본의 릴리스를 업데이트로 제시하지 않는다. 개인 저장소를
         // 만들기 전에는 네트워크 요청도 하지 않는다.
-        if (BuildConfig.UPDATE_REPO.isBlank()) return@withContext null
+        if (BuildConfig.UPDATE_REPO.isBlank()) {
+            return@withContext CheckResult.Failed("업데이트 저장소가 설정되지 않았습니다")
+        }
         try {
             val url = "https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest"
             val req = Request.Builder()
@@ -52,32 +53,39 @@ class UpdateChecker {
                 .build()
             val resp = client.newCall(req).awaitResponse()
             val body = resp.use { r ->
-                // 404 = 릴리스가 아직 없음, 403 = rate limit. 둘 다 조용히 포기.
                 if (!r.isSuccessful) {
-                    Log.i(TAG, "check skipped: HTTP ${r.code}")
-                    return@withContext null
+                    Log.i(TAG, "check failed: HTTP ${r.code}")
+                    return@withContext CheckResult.Failed("GitHub 응답 오류 (HTTP ${r.code})")
                 }
-                r.body?.string() ?: return@withContext null
+                r.body?.string() ?: return@withContext CheckResult.Failed("GitHub 응답이 비어 있습니다")
             }
             val rel = json.decodeFromString<GithubRelease>(body)
-            if (rel.draft || rel.prerelease) return@withContext null
+            if (rel.draft || rel.prerelease) return@withContext CheckResult.UpToDate
 
             val latest = rel.tagName.removePrefix("v").trim()
             val current = BuildConfig.VERSION_NAME.substringBefore("-").trim()
-            if (compareSemver(latest, current) <= 0) return@withContext null
+            if (compareSemver(latest, current) <= 0) return@withContext CheckResult.UpToDate
 
             val apk = rel.assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
-            Update(
+            val update = Update(
                 versionName = latest,
                 releaseUrl = rel.htmlUrl,
                 apkUrl = apk?.browserDownloadUrl,
                 apkSizeBytes = apk?.size ?: 0,
                 notes = rel.body.orEmpty().trim().take(600),
-            ).also { Log.i(TAG, "update available: $current -> $latest") }
+            )
+            Log.i(TAG, "update available: $current -> $latest")
+            CheckResult.UpdateAvailable(update)
         } catch (t: Throwable) {
             Log.i(TAG, "check failed: ${t.message}")
-            null
+            CheckResult.Failed("업데이트 확인 실패")
         }
+    }
+
+    sealed interface CheckResult {
+        data class UpdateAvailable(val update: Update) : CheckResult
+        data object UpToDate : CheckResult
+        data class Failed(val message: String) : CheckResult
     }
 
     data class Update(

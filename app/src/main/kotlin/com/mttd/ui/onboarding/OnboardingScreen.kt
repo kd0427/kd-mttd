@@ -1171,8 +1171,12 @@ private fun UpdateCheckButton() {
             checking = true
             resultLabel = null
             scope.launch {
-                svc.checkForUpdate()
-                resultLabel = if (svc.availableUpdate.value == null) "현재 최신 버전" else "새 버전 있음"
+                resultLabel = when (val result = svc.checkForUpdate()) {
+                    is com.mttd.data.update.UpdateChecker.CheckResult.UpdateAvailable ->
+                        "새 버전 ${result.update.versionName}"
+                    com.mttd.data.update.UpdateChecker.CheckResult.UpToDate -> "현재 최신 버전"
+                    is com.mttd.data.update.UpdateChecker.CheckResult.Failed -> result.message
+                }
                 checking = false
             }
         },

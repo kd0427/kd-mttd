@@ -98,8 +98,10 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
      * Shizuku 로 `pm install` 을 돌려야 하는데, [UserService] 를 읽기 전용으로 유지하는 게
      * 이 앱의 원칙이라 그 경로는 열지 않는다.
      */
-    suspend fun checkForUpdate() {
-        _availableUpdate.value = com.mttd.data.update.UpdateChecker().check()
+    suspend fun checkForUpdate(): com.mttd.data.update.UpdateChecker.CheckResult {
+        val result = com.mttd.data.update.UpdateChecker().check()
+        _availableUpdate.value = (result as? com.mttd.data.update.UpdateChecker.CheckResult.UpdateAvailable)?.update
+        return result
     }
 
     private fun checkForUpdateOnce() {

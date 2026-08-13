@@ -31,7 +31,7 @@ echo "sdk.dir=/opt/homebrew/share/android-commandlinetools" > local.properties
 ./gradlew :app:assembleDebug
 ```
 
-산출물은 `app/build/outputs/apk/debug/kd-mttd-0.3.10-kd-debug.apk`.
+산출물은 `app/build/outputs/apk/debug/kd-mttd-0.3.11-kd-debug.apk`.
 
 Android SDK 구성요소가 아직 없다면, Google SDK 라이선스를 검토·수락한 뒤 설치한다.
 

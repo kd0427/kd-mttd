@@ -802,7 +802,7 @@ private fun OverlayCard() {
         initialValue = com.mttd.ui.overlay.BadgeIncomeMetric.DEFAULT.id,
     )
     val timeTrackingMode by prefs.timeTrackingMode.collectAsStateWithLifecycle(
-        initialValue = com.mttd.domain.models.TimeTrackingMode.ALWAYS,
+        initialValue = com.mttd.domain.models.TimeTrackingMode.MAP_ONLY,
     )
 
     // 앱이 다시 포그라운드로 올 때 권한 상태 재확인

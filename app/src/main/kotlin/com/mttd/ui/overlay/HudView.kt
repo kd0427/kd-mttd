@@ -111,7 +111,14 @@ fun HudOverlay(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // 제목/빈 헤더 영역을 누르면 다시 요약 바로 접힌다. 헤더 안의 제어 버튼은
+            // 각자 클릭 처리를 유지한다.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onCollapse),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text("고인물 mTTD", color = Color(0xFFFB923C), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Spacer(Modifier.width(6.dp))
                 val statusText = when {

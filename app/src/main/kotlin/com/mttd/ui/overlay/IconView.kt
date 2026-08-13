@@ -101,10 +101,13 @@ fun IconOverlay(
     val perHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.incomePerHour
     }
-    val currentMapElapsed = remember(session.runs, tick) {
-        session.runs.lastOrNull { it.inProgress }
-            ?.let { (System.currentTimeMillis() - it.startedAtMs).coerceAtLeast(0) }
-            ?: 0L
+    val currentMapElapsed = remember(
+        session.currentMapElapsedAccumulatedMs,
+        session.currentMapElapsedSinceMs,
+        session.inMap,
+        tick,
+    ) {
+        session.currentMapElapsedMs
     }
 
     Box(
@@ -112,7 +115,7 @@ fun IconOverlay(
             .fillMaxSize()
             .background(Color(0xFF0F172A).copy(alpha = 0.9f), RoundedCornerShape(14.dp))
             .border(1.dp, Color(0xFFE2E8F0).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 5.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(

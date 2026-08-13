@@ -39,10 +39,12 @@ class SessionAggregator(
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
     fun resetSession() {
+        val mode = _state.value.timeTrackingMode
         _state.value = SessionState(
             active = true,
             startedAtMs = System.currentTimeMillis(),
             baselineReady = false,   // 다시 가방 정렬 관측할 때까지 계산 대기
+            timeTrackingMode = mode,
         )
         slotLastCount.clear()
         slotKeyByPosition.clear()
@@ -64,11 +66,14 @@ class SessionAggregator(
             else {
                 val now = System.currentTimeMillis()
                 val mapChunk = it.mapElapsedSinceMs?.let { since -> now - since } ?: 0
+                val currentMapChunk = it.currentMapElapsedSinceMs?.let { since -> now - since } ?: 0
                 it.copy(
                     paused = true,
                     pausedSinceMs = now,
                     mapElapsedAccumulatedMs = it.mapElapsedAccumulatedMs + mapChunk,
                     mapElapsedSinceMs = null,
+                    currentMapElapsedAccumulatedMs = it.currentMapElapsedAccumulatedMs + currentMapChunk,
+                    currentMapElapsedSinceMs = null,
                 )
             }
         }
@@ -85,6 +90,7 @@ class SessionAggregator(
                 pausedSinceMs = null,
                 pausedAccumulatedMs = it.pausedAccumulatedMs + chunk,
                 mapElapsedSinceMs = if (it.inMap && it.baselineReady) now else null,
+                currentMapElapsedSinceMs = if (it.inMap && it.baselineReady) now else null,
             )
         }
     }
@@ -233,6 +239,8 @@ class SessionAggregator(
      * OnEnterAreaBegin 이 오기 때문에 소비 항목이 화면에 뜨기도 전에 지워졌다.
      */
     private val mapOpenStartRegex = Regex("""ItemChange@\s+ProtoName=Spv3Open\s+start""")
+    /** 맵에서 지역 선택 화면으로 나갈 때 찍히는 전환. 이 순간 맵 전용 시계를 멈춘다. */
+    private val mapExitStartRegex = Regex("""ItemChange@\s+ProtoName=InputArea\s+start""")
 
     /**
      * 거래소(경매장, AuctionHouseV2) 화면 진입/퇴장. `ItemChange@` 블록이 아니라 UI 페이지
@@ -379,6 +387,8 @@ class SessionAggregator(
 
         // 맵 열기 = 새 런 시작. 이 직후의 소비(마이너스) 항목부터 "이번 진입" 에 쌓인다.
         if (mapOpenStartRegex.containsMatchIn(line)) startNewRun()
+        // 지역 선택으로 복귀하면 시간은 즉시 멈춘다. 뒤따르는 EnterArea 로그가 없더라도 처리된다.
+        if (mapExitStartRegex.containsMatchIn(line)) setMapPresence(false)
 
         // 가방 스냅샷 시작 → 계산 시작 (게임 응답 배치를 다 기다리지 않고 바로)
         if (bagSnapshotStartRegex.containsMatchIn(line)) {
@@ -649,6 +659,7 @@ class SessionAggregator(
                     baselineReady = true,
                     startedAtMs = now,
                     mapElapsedSinceMs = if (it.inMap && !it.paused) now else null,
+                    currentMapElapsedSinceMs = if (it.inMap && !it.paused) now else null,
                 )
             }
         }
@@ -658,6 +669,12 @@ class SessionAggregator(
     private fun startNewRun() {
         awaitingMapArea = true
         setMapPresence(false)
+        _state.update {
+            it.copy(
+                currentMapElapsedAccumulatedMs = 0,
+                currentMapElapsedSinceMs = null,
+            )
+        }
         closeCurrentRun()
         currentRunId = nextRunId++
         currentRunStartedAtMs = System.currentTimeMillis()
@@ -672,10 +689,13 @@ class SessionAggregator(
             if (state.inMap == inMap) return@update state
             val now = System.currentTimeMillis()
             val chunk = state.mapElapsedSinceMs?.let { now - it } ?: 0
+            val currentMapChunk = state.currentMapElapsedSinceMs?.let { now - it } ?: 0
             state.copy(
                 inMap = inMap,
                 mapElapsedAccumulatedMs = state.mapElapsedAccumulatedMs + chunk,
                 mapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
+                currentMapElapsedAccumulatedMs = state.currentMapElapsedAccumulatedMs + currentMapChunk,
+                currentMapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
             )
         }
     }
@@ -940,7 +960,9 @@ class SessionAggregator(
         val nowMs = msg.header.timestampEpochMs
 
         _state.update { s ->
-            if (!s.active || s.paused) return@update s
+            // 일시정지 중에도 맵 밖으로 나갈 수 있다. 이탈 이벤트를 버리면 재생 시
+            // 맵 밖 시간이 다시 누적되므로, 지역 전환 자체는 계속 반영한다.
+            if (!s.active) return@update s
             val prevArea = s.currentAreaId
             val lastEnterMs = s.lastEnterAreaMs
 
@@ -969,6 +991,7 @@ class SessionAggregator(
             awaitingMapArea = false
             val now = System.currentTimeMillis()
             val mapChunk = s.mapElapsedSinceMs?.let { since -> now - since } ?: 0
+            val currentMapChunk = s.currentMapElapsedSinceMs?.let { since -> now - since } ?: 0
             s.copy(
                 mapsEntered = s.mapsEntered + 1,
                 mapsCompleted = completed,
@@ -979,6 +1002,8 @@ class SessionAggregator(
                 inMap = enteringOpenedMap,
                 mapElapsedAccumulatedMs = s.mapElapsedAccumulatedMs + mapChunk,
                 mapElapsedSinceMs = if (enteringOpenedMap && s.baselineReady && !s.paused) now else null,
+                currentMapElapsedAccumulatedMs = s.currentMapElapsedAccumulatedMs + currentMapChunk,
+                currentMapElapsedSinceMs = if (enteringOpenedMap && s.baselineReady && !s.paused) now else null,
             )
         }
     }

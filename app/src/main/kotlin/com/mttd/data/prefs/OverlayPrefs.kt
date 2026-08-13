@@ -36,7 +36,7 @@ class OverlayPrefs(private val context: Context) {
 
     /** HUD 총 시간/시간당 수익의 집계 기준. */
     val timeTrackingMode: Flow<TimeTrackingMode> = context.dataStore.data.map {
-        TimeTrackingMode.fromId(it[KEY_TIME_TRACKING_MODE] ?: TimeTrackingMode.ALWAYS.id)
+        TimeTrackingMode.fromId(it[KEY_TIME_TRACKING_MODE] ?: TimeTrackingMode.MAP_ONLY.id)
     }
 
     suspend fun setTimeTrackingMode(mode: TimeTrackingMode) {

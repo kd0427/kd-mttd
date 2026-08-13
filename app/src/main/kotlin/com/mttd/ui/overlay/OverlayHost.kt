@@ -59,7 +59,7 @@ class OverlayHost(
     private var hudView: ComposeView? = null
 
     // 접힌 상태도 핵심 수치를 읽을 수 있는 가로 요약 바.
-    private val iconParams = defaultParams(dip(540), dip(52)).apply {
+    private val iconParams = defaultParams(dip(516), dip(40)).apply {
         gravity = Gravity.TOP or Gravity.START
     }
     // 높이는 WRAP_CONTENT — 고정 높이면 해상도/글꼴 배율에 따라 아래가 잘리고,
@@ -75,7 +75,7 @@ class OverlayHost(
     override val viewModelStore: androidx.lifecycle.ViewModelStore get() = store
 
     fun attach() {
-        if (iconView != null) return
+        if (iconView != null || hudView != null) return
         val savedIconX = runBlocking { prefs.iconX.first() }
         val savedIconY = runBlocking { prefs.iconY.first() }
         val savedHudX = runBlocking { prefs.hudX.first() }
@@ -89,7 +89,14 @@ class OverlayHost(
         hudParams.y = savedHudY
         hudParams.alpha = alpha
 
-        // Icon: 항상 마운트
+        mountIcon()
+
+        if (hudVisible) showHud()
+    }
+
+    /** 접힌 요약 바를 마운트한다. 상세 HUD와 동시에 존재하지 않는다. */
+    private fun mountIcon() {
+        if (iconView != null) return
         val icon = buildComposeView {
             IconOverlay(
                 sessionState = sessionState,
@@ -112,10 +119,8 @@ class OverlayHost(
             wm.addView(icon, iconParams)
             iconView = icon
         } catch (t: Throwable) {
-            Log.e(TAG, "addView icon failed", t); return
+            Log.e(TAG, "addView icon failed", t)
         }
-
-        if (hudVisible) showHud()
     }
 
     fun detach() {
@@ -127,6 +132,9 @@ class OverlayHost(
 
     fun showHud() {
         if (hudView != null) return
+        // 상세를 볼 때는 요약 바를 제거해 둘 중 하나만 보이게 한다.
+        iconView?.let { safeRemove(it) }
+        iconView = null
         val hud = buildComposeView {
             HudOverlay(
                 sessionState = sessionState,
@@ -160,6 +168,7 @@ class OverlayHost(
             ownScope.launch { prefs.setHudVisible(true) }
         } catch (t: Throwable) {
             Log.e(TAG, "addView hud failed", t)
+            mountIcon()
         }
     }
 
@@ -167,6 +176,7 @@ class OverlayHost(
         hudView?.let { safeRemove(it) }
         hudView = null
         ownScope.launch { prefs.setHudVisible(false) }
+        mountIcon()
     }
 
     fun toggleHud() {

@@ -65,13 +65,17 @@ data class SessionState(
     val pausedSinceMs: Long? = null,
 
     /** HUD 시간 및 시간당 수익의 누적 기준. */
-    val timeTrackingMode: TimeTrackingMode = TimeTrackingMode.ALWAYS,
+    val timeTrackingMode: TimeTrackingMode = TimeTrackingMode.MAP_ONLY,
     /** 현재 실제 맵 지역에 들어와 있는지. */
     val inMap: Boolean = false,
     /** 맵 입장 중에 이미 확정된 누적 시간. */
     val mapElapsedAccumulatedMs: Long = 0,
     /** 현재 맵 입장 구간의 시작 시각. 일시정지·맵 밖에서는 null. */
     val mapElapsedSinceMs: Long? = null,
+    /** 이번 맵에서 이미 확정된 실제 플레이 시간. */
+    val currentMapElapsedAccumulatedMs: Long = 0,
+    /** 이번 맵의 현재 플레이 구간 시작 시각. */
+    val currentMapElapsedSinceMs: Long? = null,
 
     /** 1분당 1점, 최대 60개 슬라이딩. 누적 [totalValue] 시계열. */
     val valueSeries: List<TimeSample> = emptyList(),
@@ -113,6 +117,14 @@ data class SessionState(
             return if (e < 5000) 0.0 else totalValue * 3_600_000.0 / e
         }
 
+    /** 이번 맵의 실제 플레이 시간. 총 시간과 똑같이 맵 밖·일시정지 시간을 제외한다. */
+    val currentMapElapsedMs: Long
+        get() {
+            if (!active || !baselineReady) return 0
+            val currentChunk = currentMapElapsedSinceMs?.let { System.currentTimeMillis() - it } ?: 0
+            return (currentMapElapsedAccumulatedMs + currentChunk).coerceAtLeast(0)
+        }
+
     /** [incomePerHour] 의 세후(실수령) 버전. [netTotalValue] 기준. */
     val netIncomePerHour: Double
         get() {
@@ -123,12 +135,12 @@ data class SessionState(
 
 /** HUD 시간 및 시간당 수익의 누적 기준. */
 enum class TimeTrackingMode(val id: String, val label: String, val description: String) {
-    ALWAYS("always", "항상 누적 (기존 방식)", "가방 정렬 후부터 일시정지한 시간을 제외하고 계속 누적합니다."),
-    MAP_ONLY("map_only", "맵 입장 중만 누적", "맵 밖에서는 총 시간과 시간당 수익 계산이 멈춥니다."),
+    MAP_ONLY("map_only", "맵 입장 중만 누적 (기본)", "맵 밖에서는 총 시간과 시간당 수익 계산이 멈춥니다."),
+    ALWAYS("always", "항상 누적", "가방 정렬 후부터 일시정지한 시간을 제외하고 계속 누적합니다."),
     ;
 
     companion object {
-        fun fromId(id: String): TimeTrackingMode = entries.firstOrNull { it.id == id } ?: ALWAYS
+        fun fromId(id: String): TimeTrackingMode = entries.firstOrNull { it.id == id } ?: MAP_ONLY
     }
 }
 

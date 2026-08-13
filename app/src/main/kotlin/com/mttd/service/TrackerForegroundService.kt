@@ -65,6 +65,11 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     private lateinit var observedPrices: com.mttd.data.prices.ObservedPriceStore
     private lateinit var runRepo: com.mttd.data.runs.RunRepository
     private var overlay: OverlayHost? = null
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        overlay?.onDisplayConfigurationChanged()
+    }
     private val assembler = MessageAssembler()
     private val characterLoadoutTracker = com.mttd.domain.CharacterLoadoutTracker()
 
@@ -261,6 +266,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
                 startForegroundOnce()
                 val path = intent.getStringExtra(EXTRA_LOG_PATH)
                 if (path != null) startPoller(path) else ensurePollerRunning()
+                ensureOverlayIfEnabled()
             }
             ACTION_STOP -> {
                 stopPoller()
@@ -271,10 +277,14 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             }
             ACTION_SHOW_OVERLAY -> {
                 startForegroundOnce()   // Overlay 만 켜는 경우도 서비스는 foreground 유지
-                ensureOverlay()
+                lifecycleScope.launch {
+                    overlayPrefs.setGamePanelEnabled(true)
+                    ensureOverlay()
+                }
                 ensurePollerRunning()
             }
             ACTION_HIDE_OVERLAY -> {
+                lifecycleScope.launch { overlayPrefs.setGamePanelEnabled(false) }
                 destroyOverlay()
             }
             ACTION_SHOW_HUD -> {
@@ -289,6 +299,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             else -> {
                 startForegroundOnce()
                 ensurePollerRunning()
+                ensureOverlayIfEnabled()
             }
         }
         return START_STICKY
@@ -378,8 +389,16 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     private fun autoShowOverlay() {
         if (overlay != null) return
         if (!android.provider.Settings.canDrawOverlays(this)) return
-        ensureOverlay()
-        Log.i(TAG, "overlay auto-shown")
+        ensureOverlayIfEnabled()
+    }
+
+    private fun ensureOverlayIfEnabled() {
+        lifecycleScope.launch {
+            if (!overlayPrefs.gamePanelEnabled.first()) return@launch
+            if (!android.provider.Settings.canDrawOverlays(this@TrackerForegroundService)) return@launch
+            ensureOverlay()
+            Log.i(TAG, "overlay auto-shown")
+        }
     }
 
     private fun stopPoller() {

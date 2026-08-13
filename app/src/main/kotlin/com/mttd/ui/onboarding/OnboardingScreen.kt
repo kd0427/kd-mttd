@@ -1,9 +1,14 @@
 package com.mttd.ui.onboarding
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,31 +16,42 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,10 +63,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -104,43 +123,65 @@ fun OnboardingScreen(
                 .fillMaxSize()
                 .padding(safePadding),
         ) {
-            Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+            ) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
                     Text(
-                        text = "고인물 mTTD",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "v${com.mttd.BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.titleSmall,
+                        text = "v${com.mttd.BuildConfig.VERSION_NAME.substringBefore('-')}",
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.weight(1f))
+                    Image(
+                        painter = painterResource(com.mttd.R.drawable.ic_mttd_header),
+                        contentDescription = "고인물 mTTD 앱 아이콘",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(68.dp)
+                            .clip(RoundedCornerShape(18.dp)),
+                    )
+                    Text(
+                        text = "고인물 mTTD",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Box(modifier = Modifier.align(Alignment.TopEnd)) {
                     UpdateCheckButton()
                 }
-                Text(
-                    text = "Torchlight: Infinite 세션 트래커",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "개인 커스텀 빌드",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
+            }
+
+            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                 UpdateBanner()
             }
 
-            TabRow(selectedTabIndex = tab.ordinal) {
-                MainTab.entries.forEach { t ->
-                    Tab(
-                        selected = tab == t,
-                        onClick = { tab = t },
-                        text = { Text(t.label) },
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
+                        shape = RoundedCornerShape(16.dp),
                     )
+                    .padding(4.dp),
+            ) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    MainTab.entries.forEach { item ->
+                        MainSegment(
+                            label = item.label,
+                            selected = tab == item,
+                            onClick = { tab = item },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
 
@@ -152,8 +193,8 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 when (tab) {
                     MainTab.EARNINGS -> {
@@ -193,6 +234,34 @@ fun OnboardingScreen(
     }
 }
 
+/** iOS 설정 앱처럼 현재 탭만 흰색 캡슐로 띄우는 상단 세그먼트. */
+@Composable
+private fun MainSegment(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 /**
  * 새 버전 알림 배너. 두 탭 모두 위에 뜬다.
  *
@@ -217,7 +286,18 @@ private fun UpdateBanner() {
     // 기본은 접힘 — 새 버전이 있다는 것만 한 줄로 알리고, 자세한 내용은 탭해서 펼쳐 보게.
     var expanded by remember(u.versionName) { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+        border = androidx.compose.material3.CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+            ),
+        ),
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -330,18 +410,50 @@ private fun parseSimpleMarkdown(text: String): androidx.compose.ui.text.Annotate
 
 @Composable
 private fun NotReadyNotice(onGoToSettings: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(
+                MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f),
+            ),
+        ),
+    ) {
+        Row(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("⚠️ Shizuku 준비 안 됨", fontWeight = FontWeight.SemiBold)
-            Text(
-                "로그를 읽을 수 없어 집계가 시작되지 않습니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(onClick = onGoToSettings) { Text("설정으로 이동") }
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.WarningAmber,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Shizuku 연결 필요", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "로그를 읽으려면 Shizuku를 준비해 주세요.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FilledTonalButton(
+                onClick = onGoToSettings,
+                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                ),
+            ) { Text("설정") }
         }
     }
 }
@@ -362,7 +474,18 @@ private fun EarningsSummaryCard() {
     val elapsed = remember(session.startedAtMs, session.paused, tick) { session.elapsedMs }
     val perHour = remember(session.totalValue, session.paused, tick) { session.incomePerHour }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = androidx.compose.ui.graphics.SolidColor(
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+            ),
+        ),
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -382,6 +505,7 @@ private fun EarningsSummaryCard() {
                         com.mttd.ui.overlay.formatFire(session.totalValue),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary,
                     )
                     Text(
                         "총 수익" +
@@ -391,11 +515,35 @@ private fun EarningsSummaryCard() {
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // 오버레이까지 안 가도 앱에서 바로 제어
-                    OutlinedButton(onClick = { service?.togglePause() }, enabled = service != null) {
-                        Text(if (session.paused) "▶ 재개" else "❚❚ 일시정지")
+                    FilledTonalButton(
+                        onClick = { service?.togglePause() },
+                        enabled = service != null,
+                        colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = if (session.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(if (session.paused) "재개" else "일시정지")
                     }
-                    OutlinedButton(onClick = { confirmReset = true }, enabled = service != null) {
+                    OutlinedButton(
+                        onClick = { confirmReset = true },
+                        enabled = service != null,
+                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = null,
+                            modifier = Modifier.size(17.dp),
+                        )
+                        Spacer(Modifier.width(4.dp))
                         Text("리셋")
                     }
                 }
@@ -425,21 +573,42 @@ private fun EarningsSummaryCard() {
                     color = MaterialTheme.colorScheme.tertiary,
                 )
             }
-            Spacer(Modifier.height(4.dp))
-            Row {
-                MiniStat("시간당", com.mttd.ui.overlay.formatFire(perHour) + " /h")
-                Spacer(Modifier.width(20.dp))
-                MiniStat("경과", formatElapsed(elapsed))
-                Spacer(Modifier.width(20.dp))
-                MiniStat("맵 진입", "${session.mapsEntered}")
-                Spacer(Modifier.width(20.dp))
-                MiniStat("픽업", "${session.pickupCount}")
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp))
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                        shape = RoundedCornerShape(14.dp),
+                    )
+                    .padding(vertical = 10.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MiniStat("시간당", com.mttd.ui.overlay.formatFire(perHour) + " /h", Modifier.weight(1f))
+                VerticalDivider(
+                    modifier = Modifier.height(34.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                )
+                MiniStat("시간", formatElapsed(elapsed), Modifier.weight(1f))
+                VerticalDivider(
+                    modifier = Modifier.height(34.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                )
+                MiniStat("맵", "${session.mapsEntered}회", Modifier.weight(1f))
+                VerticalDivider(
+                    modifier = Modifier.height(34.dp),
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                )
+                MiniStat("획득", "${session.pickupCount}개", Modifier.weight(1f))
             }
             if (!session.baselineReady) {
                 Text(
-                    "🎒 게임에서 로그 오픈 후 가방 정렬을 눌러주세요.",
+                    "🎒 로그 오픈 후 가방 정렬을 해주세요.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    color = MaterialTheme.colorScheme.secondary,
+                    maxLines = 1,
                 )
             }
         }
@@ -447,12 +616,22 @@ private fun EarningsSummaryCard() {
 }
 
 @Composable
-private fun MiniStat(label: String, value: String) {
-    Column {
-        Text(label, style = MaterialTheme.typography.labelSmall,
-             color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium,
-             fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace)
+private fun MiniStat(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Monospace,
+        )
     }
 }
 
@@ -574,33 +753,43 @@ private fun ShizukuStatusCard(
             }
             if (expanded || !collapsible) {
                 StatusRow("설치됨", state.installed)
-                StatusRow("바인더 살아있음", state.binderAlive)
+                StatusRow("Shizuku 실행", state.binderAlive)
                 StatusRow("권한 허용", state.permission)
-                StatusRow("UserService 바인딩", state.userServiceBound)
+                StatusRow("로그 연결", state.userServiceBound)
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = onRequestPermission,
                         enabled = state.installed,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF8A4B08),
+                            contentColor = Color(0xFFFFF3D6),
+                            disabledContainerColor = Color(0xFF3B2A16),
+                            disabledContentColor = Color(0xFFB8A58B),
+                        ),
                     ) {
                         Text(
                             when {
                                 !state.installed -> "Shizuku 미설치"
                                 !state.binderAlive -> "Shizuku 실행 후 재확인"
                                 !state.permission -> "권한 요청"
-                                !state.userServiceBound -> "UserService 재바인딩"
+                                !state.userServiceBound -> "로그 연결 다시 시도"
                                 else -> "이미 준비됨"
                             }
                         )
                     }
-                    OutlinedButton(onClick = {
+                    OutlinedButton(
+                        onClick = {
                         context.startActivity(
                             android.content.Intent(
                                 android.content.Intent.ACTION_VIEW,
                                 android.net.Uri.parse("https://github.com/RikkaApps/Shizuku/releases"),
                             ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
-                    }) { Text("APK 다운로드") }
+                    },
+                        border = BorderStroke(1.dp, Color(0xFF806A45)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFC46B)),
+                    ) { Text("APK 다운로드") }
                 }
             }
         }
@@ -610,7 +799,7 @@ private fun ShizukuStatusCard(
 @Composable
 private fun StatusRow(label: String, ok: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(if (ok) "✅" else "⭕")
+        Text(if (ok) "✅" else "❌")
         Text("  $label", style = MaterialTheme.typography.bodyMedium)
     }
 }
@@ -631,9 +820,9 @@ private fun AdvancedSection(userService: () -> IUserService?) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("고급", fontWeight = FontWeight.SemiBold)
+                Text("문제 해결 도구", fontWeight = FontWeight.SemiBold)
                 Text(
-                    "로그 파일 진단 · 폴링 상태 (개발자용)",
+                    "게임 로그 연결 상태를 확인합니다.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -804,17 +993,20 @@ private fun RecentLines(flow: SharedFlow<String>?) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun OverlayCard() {
     val context = LocalContext.current
     var canDraw by remember { mutableStateOf(android.provider.Settings.canDrawOverlays(context)) }
     val prefs = remember(context) { com.mttd.data.prefs.OverlayPrefs(context.applicationContext) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val badgeMetricId by prefs.badgeIncomeMetric.collectAsStateWithLifecycle(
-        initialValue = com.mttd.ui.overlay.BadgeIncomeMetric.DEFAULT.id,
-    )
     val timeTrackingMode by prefs.timeTrackingMode.collectAsStateWithLifecycle(
         initialValue = com.mttd.domain.models.TimeTrackingMode.MAP_ONLY,
     )
+    val miniPanelMetrics by prefs.miniPanelMetrics.collectAsStateWithLifecycle(
+        initialValue = com.mttd.ui.overlay.MiniPanelMetric.DEFAULT_IDS,
+    )
+    var showMinimumMetricDialog by remember { mutableStateOf(false) }
+    val panelEnabled by prefs.gamePanelEnabled.collectAsStateWithLifecycle(initialValue = true)
 
     // 앱이 다시 포그라운드로 올 때 권한 상태 재확인
     LaunchedEffect(Unit) {
@@ -830,8 +1022,13 @@ private fun OverlayCard() {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("오버레이 (M3)", fontWeight = FontWeight.SemiBold)
-            StatusRow("SYSTEM_ALERT_WINDOW 권한", canDraw)
+            Text("게임 화면 표시", fontWeight = FontWeight.SemiBold)
+            Text(
+                "게임을 하는 동안 수익 패널을 화면 위에 표시합니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            StatusRow("게임 위에 표시 권한", canDraw)
 
             if (!canDraw) {
                 Button(onClick = {
@@ -840,37 +1037,177 @@ private fun OverlayCard() {
                         android.net.Uri.parse("package:${context.packageName}"),
                     ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(i)
-                }) { Text("권한 설정 열기") }
+                }) { Text("게임 위 표시 허용") }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        com.mttd.service.TrackerForegroundService.showOverlay(context)
-                    }) { Text("오버레이 표시") }
-                    OutlinedButton(onClick = {
-                        com.mttd.service.TrackerForegroundService.hideOverlay(context)
-                    }) { Text("숨기기") }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (panelEnabled) MaterialTheme.colorScheme.surface else Color(0xFF24131B),
+                            RoundedCornerShape(14.dp),
+                        )
+                        .border(
+                            1.dp,
+                            if (panelEnabled) Color(0xFF22C55E).copy(alpha = 0.45f)
+                            else Color(0xFFF87171).copy(alpha = 0.65f),
+                            RoundedCornerShape(14.dp),
+                        )
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "게임 위 패널",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            if (panelEnabled) "게임 화면에 표시 중입니다" else "현재 꺼져 있습니다",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (panelEnabled) Color(0xFF86EFAC)
+                            else Color(0xFFFCA5A5),
+                        )
+                    }
+                    Switch(
+                        checked = panelEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                com.mttd.service.TrackerForegroundService.showOverlay(context)
+                            } else {
+                                com.mttd.service.TrackerForegroundService.hideOverlay(context)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFFDCFCE7),
+                            checkedTrackColor = Color(0xFF15803D),
+                            uncheckedThumbColor = Color(0xFFFECACA),
+                            uncheckedTrackColor = Color(0xFF7F1D1D),
+                        ),
+                    )
                 }
                 Text(
-                    "표시되면 좌상단 근처에 시계 아이콘이 뜹니다. 탭 → HUD 토글, 드래그 → 이동.",
+                    "미니패널을 탭하면 상세 패널이 열리고, 길게 누른 채 드래그하면 위치를 옮길 수 있습니다.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            HorizontalDivider()
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("미니패널 표시 항목", fontWeight = FontWeight.SemiBold)
             Text(
-                "배지 2번째 줄 표시값",
+                "게임 위 미니패널에서 볼 정보를 선택하세요.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            BadgeMetricSelector(
-                current = com.mttd.ui.overlay.BadgeIncomeMetric.fromId(badgeMetricId),
-                onSelect = { m -> scope.launch { prefs.setBadgeIncomeMetric(m.id) } },
-            )
-
-            HorizontalDivider()
             Text(
-                "시간 집계 기준",
+                "최소 1개의 항목은 선택해야 합니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFFB923C),
+                fontWeight = FontWeight.SemiBold,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (metric in com.mttd.ui.overlay.MiniPanelMetric.entries) {
+                    val selected = metric.id in miniPanelMetrics
+                    val updateSelection: (Boolean) -> Unit = { checked ->
+                        val updated = if (checked) {
+                            miniPanelMetrics + metric.id
+                        } else {
+                            miniPanelMetrics - metric.id
+                        }
+                        if (updated.isEmpty()) {
+                            showMinimumMetricDialog = true
+                        } else {
+                            scope.launch { prefs.setMiniPanelMetrics(updated) }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(
+                                width = 1.dp,
+                                color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
+                                shape = RoundedCornerShape(10.dp),
+                            )
+                            .clickable { updateSelection(!selected) }
+                            .padding(end = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = selected,
+                            onCheckedChange = updateSelection,
+                        )
+                        Text(metric.settingsLabel, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+            if (showMinimumMetricDialog) {
+                AlertDialog(
+                    onDismissRequest = { showMinimumMetricDialog = false },
+                    icon = {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(Color(0xFF4A260B), RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.WarningAmber,
+                                contentDescription = null,
+                                tint = Color(0xFFFB923C),
+                                modifier = Modifier.size(25.dp),
+                            )
+                        }
+                    },
+                    title = {
+                        Text(
+                            "표시 항목을 남겨주세요",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
+                    text = {
+                        Text(
+                            "미니패널에는 최소 1개의 항목을\n선택해야 합니다.",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { showMinimumMetricDialog = false },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF8A4B08),
+                                contentColor = Color(0xFFFFF3D6),
+                            ),
+                        ) { Text("확인") }
+                    },
+                )
+            }
+        }
+    }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("시간 측정 방식", fontWeight = FontWeight.SemiBold)
+            Text(
+                "수익과 시간당 수익을 계산할 시간을 선택합니다.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -905,28 +1242,6 @@ private fun TimeTrackingModeSelector(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-            }
-        }
-    }
-}
-
-/** 배지(아이콘 오버레이) 2번째 줄에 어떤 수익 지표를 보여줄지 선택. 1번째 줄(경과 시간)은 고정. */
-@Composable
-private fun BadgeMetricSelector(
-    current: com.mttd.ui.overlay.BadgeIncomeMetric,
-    onSelect: (com.mttd.ui.overlay.BadgeIncomeMetric) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        for (m in com.mttd.ui.overlay.BadgeIncomeMetric.entries) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectable(selected = current == m, onClick = { onSelect(m) })
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = current == m, onClick = { onSelect(m) })
-                Text(m.label, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

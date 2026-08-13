@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
@@ -23,6 +24,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // 심해 보석 테마는 어두운 배경이므로 상태바·내비게이션 바 아이콘도 밝게 고정한다.
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
+        }
 
         val shizuku = TrackerApplication.instance.shizukuManager
 
@@ -41,7 +47,7 @@ class MainActivity : ComponentActivity() {
 
                 Surface(color = MaterialTheme.colorScheme.background) {
                     when (val done = wizardCompleted) {
-                        null -> {}
+                        null -> Unit
                         else -> if (done) {
                             OnboardingScreen(
                                 state = state,

@@ -59,7 +59,10 @@ class OverlayHost(
     private var hudView: ComposeView? = null
 
     // 접힌 상태도 핵심 수치를 읽을 수 있는 가로 요약 바.
-    private val iconParams = defaultParams(dip(516), dip(40)).apply {
+    private val iconParams = defaultParams(
+        (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260)),
+        WindowManager.LayoutParams.WRAP_CONTENT,
+    ).apply {
         gravity = Gravity.TOP or Gravity.START
     }
     // 높이는 WRAP_CONTENT — 고정 높이면 해상도/글꼴 배율에 따라 아래가 잘리고,
@@ -76,8 +79,16 @@ class OverlayHost(
 
     fun attach() {
         if (iconView != null || hudView != null) return
-        val savedIconX = runBlocking { prefs.iconX.first() }
+        var savedIconX = runBlocking { prefs.iconX.first() }
         val savedIconY = runBlocking { prefs.iconY.first() }
+        // 기존 설치본도 한 번은 앱 카드의 왼쪽 시작선(20dp)에 맞춘다.
+        if (!runBlocking { prefs.miniPanelCardAlignmentApplied.first() }) {
+            savedIconX = dip(20)
+            runBlocking {
+                prefs.setIconPosition(savedIconX, savedIconY)
+                prefs.markMiniPanelCardAlignmentApplied()
+            }
+        }
         val savedHudX = runBlocking { prefs.hudX.first() }
         val savedHudY = runBlocking { prefs.hudY.first() }
         val hudVisible = runBlocking { prefs.hudVisible.first() }
@@ -100,7 +111,8 @@ class OverlayHost(
         val icon = buildComposeView {
             IconOverlay(
                 sessionState = sessionState,
-                metricFlow = prefs.badgeIncomeMetric,
+                metricFlow = prefs.miniPanelMetrics,
+                maxPanelWidthPx = iconParams.width,
                 onTogglePause = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.togglePause()
                 },
@@ -187,6 +199,15 @@ class OverlayHost(
         hudParams.alpha = alpha.coerceIn(0.2f, 1f)
         hudView?.let { wm.updateViewLayout(it, hudParams) }
         ownScope.launch { prefs.setHudAlpha(alpha) }
+    }
+
+    /** 회전 시 실제 화면 폭을 다시 읽어 미니패널의 최대 폭을 갱신한다. */
+    fun onDisplayConfigurationChanged() {
+        if (iconView == null) return
+        iconView?.let { safeRemove(it) }
+        iconView = null
+        iconParams.width = (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260))
+        mountIcon()
     }
 
     private fun buildComposeView(
@@ -306,6 +327,11 @@ class OverlayHost(
 
     private fun dip(v: Int): Int =
         (v * context.resources.displayMetrics.density).toInt()
+
+    /** 앱 호환 폭과 무관한 Android 시스템의 실제 디스플레이 가로 px. */
+    private fun systemDisplayWidthPx(): Int =
+        android.content.res.Resources.getSystem().displayMetrics.widthPixels
+
 
     companion object {
         private const val TAG = "mTTD.Overlay"

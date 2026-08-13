@@ -146,8 +146,8 @@ data class SessionState(
 
 /** HUD 시간 및 시간당 수익의 누적 기준. */
 enum class TimeTrackingMode(val id: String, val label: String, val description: String) {
-    MAP_ONLY("map_only", "맵 입장 중만 누적 (기본)", "맵 밖에서는 총 시간과 시간당 수익 계산이 멈춥니다."),
-    ALWAYS("always", "항상 누적", "가방 정렬 후부터 일시정지한 시간을 제외하고 계속 누적합니다."),
+    MAP_ONLY("map_only", "맵 안에서만 측정 (기본)", "맵 밖에서는 시간과 시간당 수익이 멈춥니다."),
+    ALWAYS("always", "항상 측정", "가방 정렬 후부터 일시정지를 제외하고 계속 측정합니다."),
     ;
 
     companion object {

@@ -129,12 +129,21 @@ fun IconOverlay(
                 elapsed > 0 -> Color(0xFF4ADE80)
                 else -> Color(0xFFCBD5E1)
             }
-            Text(
-                "고인물 v${BuildConfig.VERSION_NAME.substringBefore('-')}",
-                color = Color(0xFFFB923C),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
+            val status = when {
+                session.paused -> "중지중"
+                !session.baselineReady ||
+                    (session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap) -> "대기중"
+                else -> "진행중"
+            }
+            val statusColor = when (status) {
+                "진행중" -> Color(0xFF4ADE80)
+                "중지중" -> Color(0xFFFBBF24)
+                else -> Color(0xFF94A3B8)
+            }
+            SummaryStatus(
+                version = "고인물 v${BuildConfig.VERSION_NAME.substringBefore('-')}",
+                status = status,
+                color = statusColor,
             )
             SummaryMetric("맵핑 횟수", "${session.mapsEntered}회", primaryColor)
             SummaryMetric("현재 맵", formatElapsedIcon(currentMapElapsed), primaryColor)
@@ -148,6 +157,20 @@ fun IconOverlay(
             )
             SummaryResetButton(onReset)
         }
+    }
+}
+
+@Composable
+private fun SummaryStatus(version: String, status: String, color: Color) {
+    Column(modifier = Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            version,
+            color = Color(0xFFFB923C),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+        Text(status, color = color, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 

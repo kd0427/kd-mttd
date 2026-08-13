@@ -123,19 +123,13 @@ fun IconOverlay(
                 else -> Color(0xFFCBD5E1)
             }
             Text(
-                "고인물 v${BuildConfig.VERSION_NAME}",
+                "고인물 v${BuildConfig.VERSION_NAME.substringBefore('-')}",
                 color = Color(0xFFFB923C),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
             )
-            Text(
-                "${session.mapsEntered}회",
-                color = primaryColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-            )
+            SummaryMetric("맵핑 횟수", "${session.mapsEntered}회", primaryColor)
             SummaryMetric("현재 맵", formatElapsedIcon(currentMapElapsed), primaryColor)
             SummaryMetric("총 수익", formatFire(session.totalValue), valueColor(session.totalValue))
             SummaryMetric("총 시간", if (elapsed > 0) formatElapsedIcon(elapsed) else "대기", primaryColor)

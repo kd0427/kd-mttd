@@ -26,14 +26,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,9 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mttd.domain.models.SessionState
-import com.mttd.BuildConfig
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -98,6 +93,7 @@ fun IconOverlay(
     maxPanelWidthPx: Int? = null,
     onTogglePause: () -> Unit = {},
     onReset: () -> Unit = {},
+    onToggleItems: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
     val selectedMetricIds by metricFlow.collectAsStateWithLifecycle(
@@ -143,7 +139,7 @@ fun IconOverlay(
         with(density) { pixels.toDp() }
     } ?: (LocalConfiguration.current.screenWidthDp.dp - 40.dp).coerceAtLeast(260.dp)
     val gap = 5.dp
-    val fixedWidth = 64.dp + 24.dp + 24.dp + 10.dp + gap * (selectedMetrics.size + 2)
+    val fixedWidth = 48.dp + 24.dp + 24.dp + 30.dp + 14.dp + gap * (selectedMetrics.size + 3)
     val metricWidth = ((maxPanelWidth - fixedWidth).value / selectedMetrics.size)
         .coerceAtLeast(1f)
         // 모든 항목을 고르면 카드 최대 폭까지 균등하게 채운다.
@@ -170,19 +166,19 @@ fun IconOverlay(
             }
             val status = when {
                 session.paused -> "중지중"
-                // 기준 가방 스냅샷이 아직 없으면 로그가 연결돼도 수익/시간 계산을 시작할 수 없다.
-                !session.baselineReady -> "로그·가방 정리"
+                !session.logOpened -> "로그 오픈"
+                // 기준 가방 스냅샷이 아직 없으면 수익/시간 계산을 시작할 수 없다.
+                !session.baselineReady -> "가방 정리"
                 session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "대기중"
                 else -> "진행중"
             }
             val statusColor = when (status) {
                 "진행중" -> Color(0xFF4ADE80)
                 "중지중" -> Color(0xFFF87171)
-                "로그·가방 정리" -> Color(0xFFFB923C)
+                "로그 오픈", "가방 정리" -> Color(0xFFFB923C)
                 else -> Color(0xFF94A3B8) // 대기중
             }
             SummaryStatus(
-                version = "고인물 v${BuildConfig.VERSION_NAME.substringBefore('-')}",
                 status = status,
                 color = statusColor,
             )
@@ -206,21 +202,16 @@ fun IconOverlay(
                 paused = session.paused,
                 onClick = onTogglePause,
             )
+            Spacer(Modifier.width(4.dp))
             SummaryResetButton(onReset)
+            SummaryItemButton(onToggleItems)
         }
     }
 }
 
 @Composable
-private fun SummaryStatus(version: String, status: String, color: Color) {
-    Column(modifier = Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            version,
-            color = Color(0xFFFB923C),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-        )
+private fun SummaryStatus(status: String, color: Color) {
+    Column(modifier = Modifier.width(48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -234,7 +225,7 @@ private fun SummaryStatus(version: String, status: String, color: Color) {
             Text(
                 status,
                 color = color,
-                fontSize = if (status == "로그·가방 정리") 8.sp else 9.sp,
+                fontSize = if (status == "로그 오픈" || status == "가방 정리") 8.sp else 9.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
             )
@@ -265,37 +256,25 @@ private fun SummaryMetric(label: String, value: String, color: Color, width: and
 
 @Composable
 private fun SummaryResetButton(onReset: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    val haptics = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .size(24.dp)
             .background(Color(0xFF3F1D2E), RoundedCornerShape(7.dp))
             .pointerInput(onReset) {
                 detectTapGestures(
-                    onPress = {
-                        val armed = scope.launch {
-                            delay(SUMMARY_RESET_LONG_PRESS_MS)
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onReset()
-                        }
-                        tryAwaitRelease()
-                        armed.cancel()
-                    },
+                    onDoubleTap = { onReset() },
                 )
             },
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = Icons.Filled.Refresh,
-            contentDescription = "1초 길게 눌러 초기화",
+            contentDescription = "두 번 눌러 초기화",
             tint = Color(0xFFF87171),
             modifier = Modifier.size(16.dp),
         )
     }
 }
-
-private const val SUMMARY_RESET_LONG_PRESS_MS = 1_000L
 
 @Composable
 private fun SummaryPauseButton(paused: Boolean, onClick: () -> Unit) {
@@ -312,6 +291,19 @@ private fun SummaryPauseButton(paused: Boolean, onClick: () -> Unit) {
             tint = if (paused) Color(0xFF4ADE80) else Color(0xFFFBBF24),
             modifier = Modifier.size(16.dp),
         )
+    }
+}
+
+@Composable
+private fun SummaryItemButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(width = 30.dp, height = 24.dp)
+            .background(Color(0xFF1E3A5F), RoundedCornerShape(7.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("템", color = Color(0xFFBFDBFE), fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 

@@ -605,7 +605,11 @@ private fun EarningsSummaryCard() {
             }
             if (!session.baselineReady) {
                 Text(
-                    "🎒 로그 오픈 후 가방 정렬을 해주세요.",
+                    if (!session.logOpened) {
+                        "① 게임에서 로그 오픈을 해주세요."
+                    } else {
+                        "② 가방 정렬을 해주세요."
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                     maxLines = 1,

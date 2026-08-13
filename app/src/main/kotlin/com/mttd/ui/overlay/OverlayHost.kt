@@ -57,6 +57,7 @@ class OverlayHost(
 
     private var iconView: ComposeView? = null
     private var hudView: ComposeView? = null
+    private var itemView: ComposeView? = null
 
     // 접힌 상태도 핵심 수치를 읽을 수 있는 가로 요약 바.
     private val iconParams = defaultParams(
@@ -71,6 +72,9 @@ class OverlayHost(
     private val hudParams = defaultParams(dip(280), WindowManager.LayoutParams.WRAP_CONTENT).apply {
         gravity = Gravity.TOP or Gravity.START
         // HUD 는 터치 가능 (버튼용). Icon 이 게임 입력을 뺏지 않도록 flags 조정은 필요 시.
+    }
+    private val itemParams = defaultParams(dip(190), WindowManager.LayoutParams.WRAP_CONTENT).apply {
+        gravity = Gravity.TOP or Gravity.START
     }
 
     // ViewModelStore
@@ -119,6 +123,7 @@ class OverlayHost(
                 onReset = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.resetSession()
                 },
+                onToggleItems = { toggleItemPanel() },
             )
         }
         attachDragBehavior(
@@ -138,12 +143,15 @@ class OverlayHost(
     fun detach() {
         iconView?.let { safeRemove(it) }
         hudView?.let { safeRemove(it) }
+        itemView?.let { safeRemove(it) }
         iconView = null
         hudView = null
+        itemView = null
     }
 
     fun showHud() {
         if (hudView != null) return
+        hideItemPanel()
         // 상세를 볼 때는 요약 바를 제거해 둘 중 하나만 보이게 한다.
         iconView?.let { safeRemove(it) }
         iconView = null
@@ -193,6 +201,42 @@ class OverlayHost(
 
     fun toggleHud() {
         if (hudView == null) showHud() else hideHud()
+    }
+
+    /** `템` 버튼은 아이템 패널을 열고 닫는다. */
+    private fun toggleItemPanel() {
+        if (itemView == null) showItemPanel() else hideItemPanel()
+    }
+
+    private fun showItemPanel() {
+        if (itemView != null) return
+        val savedX = runBlocking { prefs.itemPanelX.first() }
+        val savedY = runBlocking { prefs.itemPanelY.first() }
+        if (savedX == OverlayPrefs.POSITION_UNSET || savedY == OverlayPrefs.POSITION_UNSET) {
+            itemParams.x = (iconParams.x + dip(220)).coerceAtMost(systemDisplayWidthPx() - itemParams.width)
+            itemParams.y = iconParams.y
+        } else {
+            itemParams.x = savedX
+            itemParams.y = savedY
+        }
+        val item = buildComposeView { ItemOverlay(sessionState) }
+        attachDragBehavior(
+            view = item,
+            params = itemParams,
+            onTap = null,
+            onDone = { x, y -> ownScope.launch { prefs.setItemPanelPosition(x, y) } },
+        )
+        try {
+            wm.addView(item, itemParams)
+            itemView = item
+        } catch (t: Throwable) {
+            Log.e(TAG, "addView item panel failed", t)
+        }
+    }
+
+    private fun hideItemPanel() {
+        itemView?.let { safeRemove(it) }
+        itemView = null
     }
 
     fun setHudAlpha(alpha: Float) {

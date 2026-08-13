@@ -60,6 +60,8 @@ class OverlayPrefs(private val context: Context) {
     val iconY: Flow<Int> = context.dataStore.data.map { it[KEY_ICON_Y] ?: 300 }
     val hudX: Flow<Int> = context.dataStore.data.map { it[KEY_HUD_X] ?: 60 }
     val hudY: Flow<Int> = context.dataStore.data.map { it[KEY_HUD_Y] ?: 400 }
+    val itemPanelX: Flow<Int> = context.dataStore.data.map { it[KEY_ITEM_PANEL_X] ?: POSITION_UNSET }
+    val itemPanelY: Flow<Int> = context.dataStore.data.map { it[KEY_ITEM_PANEL_Y] ?: POSITION_UNSET }
     val hudAlpha: Flow<Float> = context.dataStore.data.map { it[KEY_HUD_ALPHA] ?: 0.85f }
     val hudVisible: Flow<Boolean> = context.dataStore.data.map { it[KEY_HUD_VISIBLE] ?: false }
     /** 게임 위 패널 표시 여부. 기본값은 표시 상태. */
@@ -89,6 +91,13 @@ class OverlayPrefs(private val context: Context) {
         }
     }
 
+    suspend fun setItemPanelPosition(x: Int, y: Int) {
+        context.dataStore.edit {
+            it[KEY_ITEM_PANEL_X] = x
+            it[KEY_ITEM_PANEL_Y] = y
+        }
+    }
+
     suspend fun setHudAlpha(a: Float) {
         context.dataStore.edit { it[KEY_HUD_ALPHA] = a.coerceIn(0.2f, 1f) }
     }
@@ -111,6 +120,8 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_ICON_Y = intPreferencesKey("icon_y")
         private val KEY_HUD_X = intPreferencesKey("hud_x")
         private val KEY_HUD_Y = intPreferencesKey("hud_y")
+        private val KEY_ITEM_PANEL_X = intPreferencesKey("item_panel_x")
+        private val KEY_ITEM_PANEL_Y = intPreferencesKey("item_panel_y")
         private val KEY_HUD_ALPHA = floatPreferencesKey("hud_alpha")
         private val KEY_HUD_VISIBLE = booleanPreferencesKey("hud_visible")
         private val KEY_GAME_PANEL_ENABLED = booleanPreferencesKey("game_panel_enabled")
@@ -120,5 +131,6 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_BADGE_METRIC = androidx.datastore.preferences.core.stringPreferencesKey("badge_income_metric")
         private val KEY_MINI_PANEL_METRICS = stringSetPreferencesKey("mini_panel_metrics")
         private val KEY_TIME_TRACKING_MODE = androidx.datastore.preferences.core.stringPreferencesKey("time_tracking_mode")
+        const val POSITION_UNSET = Int.MIN_VALUE
     }
 }

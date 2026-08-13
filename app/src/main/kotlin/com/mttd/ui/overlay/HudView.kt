@@ -68,6 +68,49 @@ private val MAX_LIST_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS
 /** 거래소 화면(보유 아이템 목록)에서는 다른 통계가 없으니 더 많이 보여준다. */
 private val HOLDINGS_LIST_HEIGHT = ROW_HEIGHT * 10
 
+/** 미니패널의 `템` 버튼에서 여는, 현재 맵 획득 목록 전용 축약 패널. */
+@Composable
+fun ItemOverlay(sessionState: StateFlow<SessionState>) {
+    val session by sessionState.collectAsStateWithLifecycle()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0F172A).copy(alpha = 0.9f), RoundedCornerShape(12.dp))
+            .border(1.dp, Color(0xFFE2E8F0).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("획득 아이템", color = Color(0xFFCBD5E1), fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Text(
+                formatFire(session.currentMapValue),
+                color = when {
+                    session.currentMapValue < 0 -> Color(0xFFF87171)
+                    session.currentMapValue > 0 -> Color(0xFF4ADE80)
+                    else -> Color(0xFF94A3B8)
+                },
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+        if (session.recentPickups.isEmpty()) {
+            Text("(없음)", color = Color(0xFF94A3B8), fontSize = 9.sp)
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = ROW_HEIGHT * 5)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                for (pickup in session.recentPickups) PickupRow(pickup)
+            }
+        }
+    }
+}
+
 @Composable
 fun HudOverlay(
     sessionState: StateFlow<SessionState>,
@@ -165,7 +208,11 @@ fun HudOverlay(
                         fontWeight = FontWeight.SemiBold,
                     )
                     !session.baselineReady -> Text(
-                        "🎒 게임에서 로그 오픈 후 가방 정렬을 눌러주세요",
+                        if (!session.logOpened) {
+                            "① 게임에서 로그 오픈을 해주세요"
+                        } else {
+                            "② 가방 정렬을 눌러주세요"
+                        },
                         color = Color(0xFFFBBF24),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,

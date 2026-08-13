@@ -40,10 +40,13 @@ class SessionAggregator(
 
     fun resetSession() {
         val mode = _state.value.timeTrackingMode
+        // 수동 초기화는 이미 연결된 로그를 끊지 않는다. 다시 요구할 것은 가방 정렬뿐이다.
+        val logOpened = _state.value.logOpened
         _state.value = SessionState(
             active = true,
             startedAtMs = System.currentTimeMillis(),
             baselineReady = false,   // 다시 가방 정렬 관측할 때까지 계산 대기
+            logOpened = logOpened,
             timeTrackingMode = mode,
         )
         slotLastCount.clear()
@@ -361,6 +364,10 @@ class SessionAggregator(
      * - `MapName = …` — 맵 코드네임.
      */
     fun observeLine(line: String) {
+        // 파일이 존재하는 것만으로는 이전 게임 실행에서 남은 로그일 수 있다. 폴러가 시작된 뒤
+        // 새 줄을 실제로 수신한 순간에만 "로그 오픈" 단계를 완료한다.
+        markLogOpened()
+
         // ── 빠른 사전 필터 ──────────────────────────────────────────────
         // 실측(157,351 줄): 관심 대상은 1.25% 뿐이고 98.7% 는 렌더러/오디오 로그다.
         // 그 전부에 정규식 10 개를 돌리면 플레이 중 초당 1,000 회 매칭이 헛돈다.
@@ -387,8 +394,13 @@ class SessionAggregator(
 
         // 맵 열기 = 새 런 시작. 이 직후의 소비(마이너스) 항목부터 "이번 진입" 에 쌓인다.
         if (mapOpenStartRegex.containsMatchIn(line)) startNewRun()
-        // 지역 선택으로 복귀하면 시간은 즉시 멈춘다. 뒤따르는 EnterArea 로그가 없더라도 처리된다.
-        if (mapExitStartRegex.containsMatchIn(line)) setMapPresence(false)
+        // 지역 선택으로 복귀하면 시간은 즉시 멈춘다. 여기서 `awaitingMapArea`도 반드시
+        // 비워야 한다. 이를 남겨 두면, 귀환 직후에 도착하는 마을 EnterArea를 직전
+        // Spv3Open의 맵 진입으로 오인해 타이머가 다시 시작될 수 있다.
+        if (mapExitStartRegex.containsMatchIn(line)) {
+            awaitingMapArea = false
+            setMapPresence(false)
+        }
 
         // 가방 스냅샷 시작 → 계산 시작 (게임 응답 배치를 다 기다리지 않고 바로)
         if (bagSnapshotStartRegex.containsMatchIn(line)) {
@@ -647,6 +659,10 @@ class SessionAggregator(
         val p = pendingSlot ?: return
         pendingSlot = null
         writeBaseline(p)
+    }
+
+    private fun markLogOpened() {
+        _state.update { if (it.logOpened) it else it.copy(logOpened = true) }
     }
 
     private fun writeBaseline(p: PendingSlot) {

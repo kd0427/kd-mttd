@@ -2,6 +2,10 @@
 
 > *Torchlight: Infinite* 파밍 수익을 게임 화면 위에서 확인하는 개인용 Android 세션 트래커
 
+<p align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_mttd_launcher.png" width="160" alt="고인물 mTTD 앱 아이콘" />
+</p>
+
 ![Android 10+](https://img.shields.io/badge/Android-10%20%28API%2029%29%2B-3DDC84?logo=android&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-2563EB)
 
@@ -126,14 +130,6 @@ Android 11부터 일반 앱은 다른 앱의 `Android/data` 파일에 바로 접
 - `ttdiablo.com` — TTD 한국 시세
 - `api.github.com` — 새 버전 확인 및 APK 다운로드
 - `cdn.tlidb.com` — 아이템 아이콘 표시
-
-## 🛠️ 개발자용 실행
-
-Android Studio에서 이 폴더를 열고, Android 10 이상 에뮬레이터 또는 USB 디버깅을 켠 실제 기기를 선택한 뒤 ▶ Run을 누르면 됩니다. Gradle JVM은 **Java 17~21**을 사용하세요.
-
-```bash
-./gradlew :app:assembleDebug
-```
 
 ## ⚖️ 라이선스 및 안내
 

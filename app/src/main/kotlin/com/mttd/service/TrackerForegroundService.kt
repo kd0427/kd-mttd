@@ -361,10 +361,9 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         lifecycleScope.launch { p.status.collect { _status.value = it } }
         lifecycleScope.launch {
             p.lines.collect { line ->
-                // 디버그용 라인 스트림은 **보는 사람이 있을 때만** 채운다.
-                // replay 20 + 버퍼 1024 라 무조건 흘리면 평균 135 자 × 1044 줄이
-                // 항상 힙에 남고, 초당 100 줄이 들어오는 동안 계속 할당/방출이 일어난다.
-                if (_lines.subscriptionCount.value > 0) _lines.tryEmit(line)
+                // 진단 화면을 열기 전의 로그도 바로 확인할 수 있게 마지막 20줄은 항상 보관한다.
+                // SharedFlow에 구독자가 없을 때 남는 것은 replay 20줄뿐이라 상시 비용도 작다.
+                _lines.tryEmit(line)
                 // 라인 단위 관측 (맵 코드네임 등 assembler 밖 컨텍스트)
                 aggregator.observeLine(line)
                 characterLoadoutTracker.observeLine(line)

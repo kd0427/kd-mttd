@@ -243,7 +243,10 @@ class SessionAggregator(
      */
     private val mapOpenStartRegex = Regex("""ItemChange@\s+ProtoName=Spv3Open\s+start""")
     /** 맵에서 지역 선택 화면으로 나갈 때 찍히는 전환. 이 순간 맵 전용 시계를 멈춘다. */
-    private val mapExitStartRegex = Regex("""ItemChange@\s+ProtoName=InputArea\s+start""")
+    private val mapExitStartRegex = Regex(
+        """ItemChange@\s+ProtoName=InputArea\s+start""",
+        RegexOption.IGNORE_CASE,
+    )
 
     /**
      * 거래소(경매장, AuctionHouseV2) 화면 진입/퇴장. `ItemChange@` 블록이 아니라 UI 페이지
@@ -364,9 +367,9 @@ class SessionAggregator(
      * - `MapName = …` — 맵 코드네임.
      */
     fun observeLine(line: String) {
-        // 파일이 존재하는 것만으로는 이전 게임 실행에서 남은 로그일 수 있다. 폴러가 시작된 뒤
-        // 새 줄을 실제로 수신한 순간에만 "로그 오픈" 단계를 완료한다.
-        markLogOpened()
+        // 파일이 존재하거나 렌더러/오디오 노이즈가 들어오는 것만으로는 로그 오픈이 아니다.
+        // 실제 추적에 쓰는 게임 이벤트가 수신됐을 때만 첫 준비 단계를 완료한다.
+        if (isTrackingLogLine(line)) markLogOpened()
 
         // ── 빠른 사전 필터 ──────────────────────────────────────────────
         // 실측(157,351 줄): 관심 대상은 1.25% 뿐이고 98.7% 는 렌더러/오디오 로그다.
@@ -523,6 +526,13 @@ class SessionAggregator(
         line.contains("MapName") ||
         line.contains("OnEnterArea") ||
         line.contains("AuctionHouseV2")
+
+    /** 로그 오픈 완료 판단에 쓰는, 이 앱이 실제로 해석하는 게임 이벤트 줄. */
+    private fun isTrackingLogLine(line: String): Boolean =
+        line.contains("ItemChange@") ||
+            line.contains("BagMgr@:") ||
+            line.contains("NetGameMgr:OnEnterArea") ||
+            line.contains("MapName")
 
     /**
      * 경매장 시세 조회(`XchgSearchPrice`) 블록 처리.
@@ -976,6 +986,14 @@ class SessionAggregator(
         }
 
         val newArea = levelUid ?: levelId
+        // 마을 복귀 EnterArea에는 버전·로딩 순서에 따라 LevelUid/LevelId가 없을 수 있다.
+        // 맵을 열고 기다리는 중인 경우만 예외로 두고, 그 외에는 이 이벤트 자체를 이탈 신호로
+        // 처리한다. 기존에는 여기서 즉시 return 해 `inMap=true`가 남아 MAP_ONLY 시간도 계속
+        // 누적될 수 있었다.
+        if (newArea == null && !awaitingMapArea) {
+            setMapPresence(false)
+            return
+        }
         // 게임이 한 번의 맵 진입에도 여러 OnEnterAreaBegin 을 emit 하므로 areaId 로 dedupe.
         // (예: 로딩 단계 → 로딩 완료 → 실제 게임플레이 각각 fire)
         val nowMs = msg.header.timestampEpochMs

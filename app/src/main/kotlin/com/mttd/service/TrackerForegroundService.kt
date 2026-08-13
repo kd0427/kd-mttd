@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -179,6 +180,9 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             // 완료된 회차의 아이템 목록은 디스크로. 메모리엔 요약만 남는다.
             onRunFinished = { run -> lifecycleScope.launch { runRepo.save(run) } },
         )
+        lifecycleScope.launch {
+            overlayPrefs.timeTrackingMode.collect { aggregator.setTimeTrackingMode(it) }
+        }
         ensureNotificationChannel()
         TrackerApplication.instance.setTrackerService(this)
         startPriceRefreshLoop()

@@ -8,6 +8,7 @@ import com.mttd.domain.models.MapRun
 import com.mttd.domain.models.PickupSummary
 import com.mttd.domain.models.SessionState
 import com.mttd.domain.models.TimeSample
+import com.mttd.domain.models.TimeTrackingMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,13 +54,23 @@ class SessionAggregator(
         currentRunId = -1
         currentRunMapName = null
         nextRunId = 1
+        awaitingMapArea = false
         pausedByExchange = false
     }
 
     fun pauseSession() {
         _state.update {
             if (it.paused) it
-            else it.copy(paused = true, pausedSinceMs = System.currentTimeMillis())
+            else {
+                val now = System.currentTimeMillis()
+                val mapChunk = it.mapElapsedSinceMs?.let { since -> now - since } ?: 0
+                it.copy(
+                    paused = true,
+                    pausedSinceMs = now,
+                    mapElapsedAccumulatedMs = it.mapElapsedAccumulatedMs + mapChunk,
+                    mapElapsedSinceMs = null,
+                )
+            }
         }
     }
 
@@ -67,17 +78,24 @@ class SessionAggregator(
         _state.update {
             if (!it.paused) return@update it
             val since = it.pausedSinceMs ?: return@update it
-            val chunk = System.currentTimeMillis() - since
+            val now = System.currentTimeMillis()
+            val chunk = now - since
             it.copy(
                 paused = false,
                 pausedSinceMs = null,
                 pausedAccumulatedMs = it.pausedAccumulatedMs + chunk,
+                mapElapsedSinceMs = if (it.inMap && it.baselineReady) now else null,
             )
         }
     }
 
     fun togglePause() {
         if (_state.value.paused) resumeSession() else pauseSession()
+    }
+
+    /** 설정 화면에서 고른 시간 집계 기준을 즉시 반영한다. */
+    fun setTimeTrackingMode(mode: TimeTrackingMode) {
+        _state.update { if (it.timeTrackingMode == mode) it else it.copy(timeTrackingMode = mode) }
     }
 
     /** 거래소 진입 시 우리가 자동으로 걸었던 pause 인지 — 유저가 직접 pause 한 건 우리가 안 푼다. */
@@ -300,6 +318,8 @@ class SessionAggregator(
     private var currentRunStartedAtMs: Long = 0
     private var currentRunMapName: String? = null
     private var nextRunId: Long = 1
+    /** Spv3Open 뒤 처음 들어오는 지역은 실제 맵 진입으로 본다. */
+    private var awaitingMapArea = false
 
     /**
      * 인벤토리 슬롯 별 마지막 관측 count. 실제 획득량(delta) 계산에 사용.
@@ -623,18 +643,41 @@ class SessionAggregator(
         if (_state.value.baselineReady) return
         _state.update {
             if (it.baselineReady) it
-            else it.copy(baselineReady = true, startedAtMs = System.currentTimeMillis())
+            else {
+                val now = System.currentTimeMillis()
+                it.copy(
+                    baselineReady = true,
+                    startedAtMs = now,
+                    mapElapsedSinceMs = if (it.inMap && !it.paused) now else null,
+                )
+            }
         }
     }
 
     /** 새 맵 시작 — 진행 중이던 회차를 닫아 기록으로 넘기고, "이번 맵" 을 비운다. */
     private fun startNewRun() {
+        awaitingMapArea = true
+        setMapPresence(false)
         closeCurrentRun()
         currentRunId = nextRunId++
         currentRunStartedAtMs = System.currentTimeMillis()
         currentRunMapName = null
         currentRunByItem.clear()
         publishRuns()
+    }
+
+    /** 맵 안/밖 전환 시 맵 전용 시계를 확정하거나 재개한다. */
+    private fun setMapPresence(inMap: Boolean) {
+        _state.update { state ->
+            if (state.inMap == inMap) return@update state
+            val now = System.currentTimeMillis()
+            val chunk = state.mapElapsedSinceMs?.let { now - it } ?: 0
+            state.copy(
+                inMap = inMap,
+                mapElapsedAccumulatedMs = state.mapElapsedAccumulatedMs + chunk,
+                mapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
+            )
+        }
     }
 
     /**
@@ -922,6 +965,10 @@ class SessionAggregator(
             // "이번 진입" 목록은 여기서 비우지 않는다. 맵 열기(Spv3Open) 직후 ~100 ms 만에
             // 이 이벤트가 오기 때문에, 여기서 비우면 방금 기록한 소비(마이너스) 가 사라진다.
             // 목록 초기화는 startNewRun() 이 Spv3Open 시점에 수행.
+            val enteringOpenedMap = awaitingMapArea
+            awaitingMapArea = false
+            val now = System.currentTimeMillis()
+            val mapChunk = s.mapElapsedSinceMs?.let { since -> now - since } ?: 0
             s.copy(
                 mapsEntered = s.mapsEntered + 1,
                 mapsCompleted = completed,
@@ -929,6 +976,9 @@ class SessionAggregator(
                 currentMapId = levelId,
                 currentMapName = displayName,
                 lastEnterAreaMs = nowMs,
+                inMap = enteringOpenedMap,
+                mapElapsedAccumulatedMs = s.mapElapsedAccumulatedMs + mapChunk,
+                mapElapsedSinceMs = if (enteringOpenedMap && s.baselineReady && !s.paused) now else null,
             )
         }
     }

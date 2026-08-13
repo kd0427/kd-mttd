@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.mttd.domain.models.TimeTrackingMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -31,6 +32,15 @@ class OverlayPrefs(private val context: Context) {
 
     suspend fun setBadgeIncomeMetric(id: String) {
         context.dataStore.edit { it[KEY_BADGE_METRIC] = id }
+    }
+
+    /** HUD 총 시간/시간당 수익의 집계 기준. */
+    val timeTrackingMode: Flow<TimeTrackingMode> = context.dataStore.data.map {
+        TimeTrackingMode.fromId(it[KEY_TIME_TRACKING_MODE] ?: TimeTrackingMode.ALWAYS.id)
+    }
+
+    suspend fun setTimeTrackingMode(mode: TimeTrackingMode) {
+        context.dataStore.edit { it[KEY_TIME_TRACKING_MODE] = mode.id }
     }
 
     val iconX: Flow<Int> = context.dataStore.data.map { it[KEY_ICON_X] ?: 60 }
@@ -80,5 +90,6 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_WIZARD_COMPLETED = booleanPreferencesKey("wizard_completed")
         private val KEY_PRICE_SOURCE = androidx.datastore.preferences.core.stringPreferencesKey("price_source")
         private val KEY_BADGE_METRIC = androidx.datastore.preferences.core.stringPreferencesKey("badge_income_metric")
+        private val KEY_TIME_TRACKING_MODE = androidx.datastore.preferences.core.stringPreferencesKey("time_tracking_mode")
     }
 }

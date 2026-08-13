@@ -86,16 +86,19 @@ fun IconOverlay(
     // 경과 시간을 흘려보내기 위한 1 초 틱.
     // 예전엔 `while (true)` 라 일시정지·집계 대기 상태에서도 영원히 깨어나
     // 오버레이를 매초 재구성/재드로우했다. 실제로 시간이 흐를 때만 돌린다.
-    val ticking = session.active && !session.paused && session.baselineReady
+    val ticking = session.active &&
+        !session.paused &&
+        session.baselineReady &&
+        (session.timeTrackingMode != com.mttd.domain.models.TimeTrackingMode.MAP_ONLY || session.inMap)
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(ticking) {
         while (ticking) { delay(1000); tick++ }
     }
 
-    val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, tick) {
+    val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.elapsedMs
     }
-    val perHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, tick) {
+    val perHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.incomePerHour
     }
     val currentMapElapsed = remember(session.runs, tick) {

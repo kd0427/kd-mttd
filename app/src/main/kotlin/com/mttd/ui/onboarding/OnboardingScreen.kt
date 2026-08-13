@@ -761,6 +761,9 @@ private fun OverlayCard() {
     val badgeMetricId by prefs.badgeIncomeMetric.collectAsStateWithLifecycle(
         initialValue = com.mttd.ui.overlay.BadgeIncomeMetric.DEFAULT.id,
     )
+    val timeTrackingMode by prefs.timeTrackingMode.collectAsStateWithLifecycle(
+        initialValue = com.mttd.domain.models.TimeTrackingMode.ALWAYS,
+    )
 
     // 앱이 다시 포그라운드로 올 때 권한 상태 재확인
     LaunchedEffect(Unit) {
@@ -813,6 +816,45 @@ private fun OverlayCard() {
                 current = com.mttd.ui.overlay.BadgeIncomeMetric.fromId(badgeMetricId),
                 onSelect = { m -> scope.launch { prefs.setBadgeIncomeMetric(m.id) } },
             )
+
+            HorizontalDivider()
+            Text(
+                "시간 집계 기준",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TimeTrackingModeSelector(
+                current = timeTrackingMode,
+                onSelect = { mode -> scope.launch { prefs.setTimeTrackingMode(mode) } },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimeTrackingModeSelector(
+    current: com.mttd.domain.models.TimeTrackingMode,
+    onSelect: (com.mttd.domain.models.TimeTrackingMode) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (mode in com.mttd.domain.models.TimeTrackingMode.entries) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = current == mode, onClick = { onSelect(mode) })
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = current == mode, onClick = { onSelect(mode) })
+                Column {
+                    Text(mode.label, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        mode.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }

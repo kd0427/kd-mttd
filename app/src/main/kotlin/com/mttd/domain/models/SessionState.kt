@@ -64,6 +64,15 @@ data class SessionState(
     /** 현재 pause 구간 시작 시각. paused=true 일 때만 non-null. */
     val pausedSinceMs: Long? = null,
 
+    /** HUD 시간 및 시간당 수익의 누적 기준. */
+    val timeTrackingMode: TimeTrackingMode = TimeTrackingMode.ALWAYS,
+    /** 현재 실제 맵 지역에 들어와 있는지. */
+    val inMap: Boolean = false,
+    /** 맵 입장 중에 이미 확정된 누적 시간. */
+    val mapElapsedAccumulatedMs: Long = 0,
+    /** 현재 맵 입장 구간의 시작 시각. 일시정지·맵 밖에서는 null. */
+    val mapElapsedSinceMs: Long? = null,
+
     /** 1분당 1점, 최대 60개 슬라이딩. 누적 [totalValue] 시계열. */
     val valueSeries: List<TimeSample> = emptyList(),
 
@@ -80,10 +89,18 @@ data class SessionState(
         get() {
             if (!active || !baselineReady) return 0
             val now = System.currentTimeMillis()
-            val raw = (endedAtMs ?: now) - startedAtMs
-            val currentPauseChunk =
-                if (paused && pausedSinceMs != null) now - pausedSinceMs else 0
-            return (raw - pausedAccumulatedMs - currentPauseChunk).coerceAtLeast(0)
+            return when (timeTrackingMode) {
+                TimeTrackingMode.ALWAYS -> {
+                    val raw = (endedAtMs ?: now) - startedAtMs
+                    val currentPauseChunk =
+                        if (paused && pausedSinceMs != null) now - pausedSinceMs else 0
+                    (raw - pausedAccumulatedMs - currentPauseChunk).coerceAtLeast(0)
+                }
+                TimeTrackingMode.MAP_ONLY -> {
+                    val currentMapChunk = mapElapsedSinceMs?.let { now - it } ?: 0
+                    (mapElapsedAccumulatedMs + currentMapChunk).coerceAtLeast(0)
+                }
+            }
         }
 
     /**
@@ -102,6 +119,17 @@ data class SessionState(
             val e = elapsedMs
             return if (e < 5000) 0.0 else netTotalValue * 3_600_000.0 / e
         }
+}
+
+/** HUD 시간 및 시간당 수익의 누적 기준. */
+enum class TimeTrackingMode(val id: String, val label: String, val description: String) {
+    ALWAYS("always", "항상 누적 (기존 방식)", "가방 정렬 후부터 일시정지한 시간을 제외하고 계속 누적합니다."),
+    MAP_ONLY("map_only", "맵 입장 중만 누적", "맵 밖에서는 총 시간과 시간당 수익 계산이 멈춥니다."),
+    ;
+
+    companion object {
+        fun fromId(id: String): TimeTrackingMode = entries.firstOrNull { it.id == id } ?: ALWAYS
+    }
 }
 
 data class TimeSample(val timeSlotMs: Long, val cumulativeValue: Double)

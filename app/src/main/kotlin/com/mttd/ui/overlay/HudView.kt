@@ -82,18 +82,21 @@ fun HudOverlay(
     val prices = priceState?.collectAsStateWithLifecycle()?.value
 
     // 시간이 실제로 흐를 때만 1 초 틱을 돌린다 (일시정지·집계 대기 중엔 정지).
-    val ticking = session.active && !session.paused && session.baselineReady
+    val ticking = session.active &&
+        !session.paused &&
+        session.baselineReady &&
+        (session.timeTrackingMode != com.mttd.domain.models.TimeTrackingMode.MAP_ONLY || session.inMap)
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(ticking) {
         while (ticking) { delay(1000); tick++ }
     }
-    val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, session.pausedAccumulatedMs, session.pausedSinceMs, tick) {
+    val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, session.pausedAccumulatedMs, session.pausedSinceMs, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.elapsedMs
     }
-    val incomePerHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, tick) {
+    val incomePerHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.incomePerHour
     }
-    val netIncomePerHour = remember(session.netTotalValue, session.active, session.endedAtMs, session.paused, tick) {
+    val netIncomePerHour = remember(session.netTotalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.netIncomePerHour
     }
 

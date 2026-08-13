@@ -479,11 +479,16 @@ class SessionAggregator(
         // D) 그 외 라인 → 대기 중이던 Update/Add 는 Modfy 가 안 붙었으므로 스냅샷 확정
         flushPendingSlotAsBaseline()
 
-        // E) MapName 추적 (내부, UI 표시는 제거됨)
+        // E) MapName 추적. LoginScene 은 맵 밖(마을/지역 선택) 복귀 신호라 이전에는
+        // 표시용 코드에서 제외만 했지만, 맵 전용 타이머도 여기서 반드시 멈춰야 한다.
         val m = mapNameRegex.find(line)
         if (m != null) {
             val code = m.groupValues[1]
-            if (code != latestMapCode && code.isNotEmpty() && !code.startsWith("LoginScene")) {
+            if (code.startsWith("LoginScene")) {
+                latestMapCode = null
+                awaitingMapArea = false
+                setMapPresence(false)
+            } else if (code != latestMapCode && code.isNotEmpty()) {
                 latestMapCode = code
             }
         }

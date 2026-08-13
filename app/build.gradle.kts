@@ -28,8 +28,8 @@ android {
         targetSdk = 34
         // 릴리스마다 반드시 올릴 것. 안 올리면 시스템이 업데이트로 인식하지 않는다.
         // versionName 은 GitHub 릴리스 태그(vX.Y.Z)와 맞춘다 — 인앱 업데이트 확인이 이걸로 비교.
-        versionCode = 41
-        versionName = "0.4.1"
+        versionCode = 42
+        versionName = "0.4.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

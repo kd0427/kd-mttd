@@ -139,7 +139,10 @@ fun IconOverlay(
         with(density) { pixels.toDp() }
     } ?: (LocalConfiguration.current.screenWidthDp.dp - 40.dp).coerceAtLeast(260.dp)
     val gap = 5.dp
-    val fixedWidth = 48.dp + 24.dp + 24.dp + 30.dp + 14.dp + gap * (selectedMetrics.size + 3)
+    val statusToMetricGap = 1.dp
+    val controlGap = 9.dp
+    val fixedWidth = 48.dp + statusToMetricGap + 24.dp + controlGap + 24.dp + controlGap + 30.dp +
+        gap * (selectedMetrics.size - 1)
     val metricWidth = ((maxPanelWidth - fixedWidth).value / selectedMetrics.size)
         .coerceAtLeast(1f)
         // 모든 항목을 고르면 카드 최대 폭까지 균등하게 채운다.
@@ -157,7 +160,6 @@ fun IconOverlay(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(gap),
         ) {
             val primaryColor = when {
                 session.paused -> Color(0xFFFBBF24)
@@ -182,7 +184,8 @@ fun IconOverlay(
                 status = status,
                 color = statusColor,
             )
-            for (metric in selectedMetrics) {
+            Spacer(Modifier.width(statusToMetricGap))
+            selectedMetrics.forEachIndexed { index, metric ->
                 when (metric) {
                     MiniPanelMetric.MAP_COUNT ->
                         SummaryMetric("맵핑 횟수", "${session.mapsEntered}회", primaryColor, metricWidth)
@@ -197,13 +200,16 @@ fun IconOverlay(
                     MiniPanelMetric.CURRENT_MAP_VALUE ->
                         SummaryMetric("이번 맵", formatFire(session.currentMapValue), valueColor(session.currentMapValue), metricWidth)
                 }
+                if (index < selectedMetrics.lastIndex) Spacer(Modifier.width(gap))
             }
+            Spacer(Modifier.width(gap))
             SummaryPauseButton(
                 paused = session.paused,
                 onClick = onTogglePause,
             )
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(controlGap))
             SummaryResetButton(onReset)
+            Spacer(Modifier.width(controlGap))
             SummaryItemButton(onToggleItems)
         }
     }

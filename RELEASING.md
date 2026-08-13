@@ -1,4 +1,4 @@
-# KD mTTD 릴리스 방법
+# 고인물 mTTD 릴리스 방법
 
 `v*` 형식의 Git tag를 GitHub에 push하면 GitHub Actions가 서명된 release APK를 빌드하고
 동일한 버전의 GitHub Release에 첨부한다.
@@ -28,10 +28,10 @@ base64 < release.jks | tr -d '\n'
 3. 같은 버전의 tag를 만들고 푸시한다.
 
 ```bash
-git tag v0.3.5
-git push origin v0.3.5
+git tag v0.3.7-kd
+git push origin v0.3.7-kd
 ```
 
-워크플로가 끝나면 GitHub Releases에서 `kd-mttd-0.3.5-release.apk`를 내려받을 수 있다.
+워크플로가 끝나면 GitHub Releases에서 `kd-mttd-0.3.7-kd-release.apk`를 내려받을 수 있다.
 
 > Tag의 버전과 `versionName`은 반드시 같게 유지한다. 앱 내부 업데이트 확인은 GitHub Release tag를 기준으로 비교한다.

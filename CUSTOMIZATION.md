@@ -1,4 +1,4 @@
-# KD mTTD 커스텀 기준
+# 고인물 mTTD 커스텀 기준
 
 이 저장소는 `listil/mttd`에서 가져온 개인 포크다.
 
@@ -24,7 +24,7 @@ git merge upstream/main
 
 | 항목 | 값 |
 | --- | --- |
-| 표시 이름 | KD mTTD |
+| 표시 이름 | 고인물 mTTD |
 | release application ID | `com.doyoon.kdmttd` |
 | debug application ID | `com.doyoon.kdmttd.debug` |
 | APK 이름 | `kd-mttd-<version>-<buildType>.apk` |
@@ -34,8 +34,16 @@ Kotlin 내부 패키지(`com.mttd`)는 의도적으로 유지한다. 전면 패�
 
 ## 업데이트 채널
 
-기본 업데이트 채널은 꺼져 있다. 개인 GitHub 릴리스로 켜려면 빌드 시 아래 옵션을 준다.
+GitHub Actions 릴리스 빌드에서는 `kd0427/kd-mttd`를 업데이트 채널로 지정한다. 로컬 release
+빌드에서도 같은 채널을 사용하려면 아래 옵션을 준다.
 
 ```bash
-./gradlew :app:assembleRelease -PupdateRepo=GITHUB_ID/kd-mttd
+./gradlew :app:assembleRelease -PupdateRepo=kd0427/kd-mttd
 ```
+
+## 현재 HUD 설계
+
+- 앱을 접은 상태는 원형 아이콘이 아니라 가로형 요약 바다.
+- 요약 바에는 상태, 경과 시간, 총 수익, 시간당 수익, 이번 맵 수익을 표시한다.
+- 짧게 탭하면 기존의 상세 HUD를 열고, 길게 누른 채 드래그하면 위치를 옮긴다.
+- 현재 배포 버전은 `0.3.6-kd`다.

@@ -40,13 +40,10 @@ class SessionAggregator(
 
     fun resetSession() {
         val mode = _state.value.timeTrackingMode
-        // 수동 초기화는 이미 연결된 로그를 끊지 않는다. 다시 요구할 것은 가방 정렬뿐이다.
-        val logOpened = _state.value.logOpened
         _state.value = SessionState(
             active = true,
             startedAtMs = System.currentTimeMillis(),
             baselineReady = false,   // 다시 가방 정렬 관측할 때까지 계산 대기
-            logOpened = logOpened,
             timeTrackingMode = mode,
         )
         slotLastCount.clear()
@@ -367,10 +364,6 @@ class SessionAggregator(
      * - `MapName = …` — 맵 코드네임.
      */
     fun observeLine(line: String) {
-        // 파일이 존재하거나 렌더러/오디오 노이즈가 들어오는 것만으로는 로그 오픈이 아니다.
-        // 실제 추적에 쓰는 게임 이벤트가 수신됐을 때만 첫 준비 단계를 완료한다.
-        if (isTrackingLogLine(line)) markLogOpened()
-
         // ── 빠른 사전 필터 ──────────────────────────────────────────────
         // 실측(157,351 줄): 관심 대상은 1.25% 뿐이고 98.7% 는 렌더러/오디오 로그다.
         // 그 전부에 정규식 10 개를 돌리면 플레이 중 초당 1,000 회 매칭이 헛돈다.
@@ -527,12 +520,6 @@ class SessionAggregator(
         line.contains("OnEnterArea") ||
         line.contains("AuctionHouseV2")
 
-    /** 로그 오픈 완료 판단에 쓰는, 이 앱이 실제로 해석하는 게임 이벤트 줄. */
-    private fun isTrackingLogLine(line: String): Boolean =
-        line.contains("ItemChange@") ||
-            line.contains("BagMgr@:") ||
-            line.contains("NetGameMgr:OnEnterArea") ||
-            line.contains("MapName")
 
     /**
      * 경매장 시세 조회(`XchgSearchPrice`) 블록 처리.
@@ -669,10 +656,6 @@ class SessionAggregator(
         val p = pendingSlot ?: return
         pendingSlot = null
         writeBaseline(p)
-    }
-
-    private fun markLogOpened() {
-        _state.update { if (it.logOpened) it else it.copy(logOpened = true) }
     }
 
     private fun writeBaseline(p: PendingSlot) {

@@ -81,7 +81,6 @@ import com.mttd.domain.models.SessionState
 import com.mttd.service.TrackerForegroundService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -605,11 +604,7 @@ private fun EarningsSummaryCard() {
             }
             if (!session.baselineReady) {
                 Text(
-                    if (!session.logOpened) {
-                        "① 게임에서 로그 오픈을 해주세요."
-                    } else {
-                        "② 가방 정렬을 해주세요."
-                    },
+                    "🎒 로그 오픈 후 가방 정렬을 해주세요.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                     maxLines = 1,
@@ -949,27 +944,15 @@ private fun LogTailCard(userService: () -> IUserService?) {
 
             HorizontalDivider()
             Text("최근 라인 (10개)", fontWeight = FontWeight.SemiBold)
-            RecentLines(svc?.lines)
+            val recentLines by (svc?.recentLines ?: MutableStateFlow(emptyList<String>()))
+                .collectAsStateWithLifecycle()
+            RecentLines(recentLines)
         }
     }
 }
 
 @Composable
-private fun RecentLines(flow: SharedFlow<String>?) {
-    val recent = remember { mutableStateOf(ArrayDeque<String>()) }
-    LaunchedEffect(flow) {
-        if (flow == null) return@LaunchedEffect
-        launch {
-            flow.collect { line ->
-                val dq = recent.value
-                dq.addLast(line)
-                while (dq.size > 10) dq.removeFirst()
-                // trigger recomposition — replace with a copy
-                recent.value = ArrayDeque(dq)
-            }
-        }
-    }
-    val lines = recent.value
+private fun RecentLines(lines: List<String>) {
     if (lines.isEmpty()) {
         Text("(아직 없음)", style = MaterialTheme.typography.bodySmall)
     } else {
@@ -1001,6 +984,7 @@ private fun RecentLines(flow: SharedFlow<String>?) {
 private fun OverlayCard() {
     val context = LocalContext.current
     var canDraw by remember { mutableStateOf(android.provider.Settings.canDrawOverlays(context)) }
+    var canReadUsage by remember { mutableStateOf(hasUsageAccess(context)) }
     val prefs = remember(context) { com.mttd.data.prefs.OverlayPrefs(context.applicationContext) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val timeTrackingMode by prefs.timeTrackingMode.collectAsStateWithLifecycle(
@@ -1011,6 +995,7 @@ private fun OverlayCard() {
     )
     var showMinimumMetricDialog by remember { mutableStateOf(false) }
     val panelEnabled by prefs.gamePanelEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val autoStartOnGameLaunch by prefs.autoStartOnGameLaunch.collectAsStateWithLifecycle(initialValue = false)
 
     // 앱이 다시 포그라운드로 올 때 권한 상태 재확인
     LaunchedEffect(Unit) {
@@ -1018,6 +1003,8 @@ private fun OverlayCard() {
             kotlinx.coroutines.delay(500)
             val v = android.provider.Settings.canDrawOverlays(context)
             if (v != canDraw) canDraw = v
+            val usage = hasUsageAccess(context)
+            if (usage != canReadUsage) canReadUsage = usage
         }
     }
 
@@ -1088,11 +1075,41 @@ private fun OverlayCard() {
                         ),
                     )
                 }
-                Text(
-                    "미니패널을 탭하면 상세 패널이 열리고, 길게 누른 채 드래그하면 위치를 옮길 수 있습니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Text(
+                "미니패널을 탭하면 상세 패널이 열리고, 길게 누른 채 드래그하면 위치를 옮길 수 있습니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+            Text("게임 실행 시 자동 시작", fontWeight = FontWeight.SemiBold)
+            Text(
+                "Shizuku가 준비된 상태에서 게임을 실행하면 mTTD가 로그 감시와 게임 위 패널을 자동으로 시작합니다.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            StatusRow("사용 기록 접근", canReadUsage)
+            if (!canReadUsage) {
+                Button(onClick = {
+                    context.startActivity(
+                        android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }) { Text("사용 기록 접근 허용") }
+            }
+            Switch(
+                checked = autoStartOnGameLaunch,
+                enabled = canReadUsage,
+                onCheckedChange = { enabled ->
+                    scope.launch { prefs.setAutoStartOnGameLaunch(enabled) }
+                    if (enabled) com.mttd.service.TrackerForegroundService.startSelfManaged(context)
+                },
+            )
+            Text(
+                "재부팅 뒤에도 자동 시작을 유지합니다. 배터리 최적화가 강한 기기는 mTTD를 절전 예외로 설정해 주세요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             }
 
         }
@@ -1109,6 +1126,7 @@ private fun OverlayCard() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
             Text(
                 "최소 1개의 항목은 선택해야 합니다.",
                 style = MaterialTheme.typography.bodySmall,
@@ -1221,6 +1239,15 @@ private fun OverlayCard() {
             )
         }
     }
+}
+
+private fun hasUsageAccess(context: android.content.Context): Boolean {
+    val appOps = context.getSystemService(android.app.AppOpsManager::class.java)
+    return appOps.unsafeCheckOpNoThrow(
+        android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+        android.os.Process.myUid(),
+        context.packageName,
+    ) == android.app.AppOpsManager.MODE_ALLOWED
 }
 
 @Composable

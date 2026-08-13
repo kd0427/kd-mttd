@@ -17,6 +17,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 자동 게임 시작 감지. 사용자가 시스템 설정에서 별도로 허용한다. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- 명시적으로 요청/사용하지 않는 것들 (감사용 주석):
          - 광고 ID (ACCESS_ADSERVICES_*)
@@ -73,7 +76,17 @@
             android:name=".service.TrackerForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync"
-            android:stopWithTask="true" />
+            android:stopWithTask="false" />
+
+        <receiver
+            android:name=".service.BootReceiver"
+            android:directBootAware="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name=".MainActivity"

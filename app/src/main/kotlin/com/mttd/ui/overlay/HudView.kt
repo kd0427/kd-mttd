@@ -165,11 +165,18 @@ fun HudOverlay(
                 Text("고인물 mTTD", color = Color(0xFFFB923C), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Spacer(Modifier.width(6.dp))
                 val statusText = when {
-                    !session.active -> "대기"
-                    session.paused -> "❚❚ 일시정지"
-                    else -> "● 진행"
+                    session.paused -> "● 중지중"
+                    !session.baselineReady -> "● 로그·가방"
+                    session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "● 대기중"
+                    else -> "● 진행중"
                 }
-                Text(statusText, color = Color(0xFFCBD5E1), fontSize = 10.sp)
+                val statusColor = when {
+                    session.paused -> Color(0xFFF87171)
+                    !session.baselineReady -> Color(0xFFFB923C)
+                    session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> Color(0xFF94A3B8)
+                    else -> Color(0xFF4ADE80)
+                }
+                Text(statusText, color = statusColor, fontSize = 10.sp)
                 Spacer(Modifier.fillMaxWidth().weight(1f))
                 HudMaterialIconButton(Icons.Filled.Settings, onOpenSettings)
                 Spacer(Modifier.width(3.dp))
@@ -208,11 +215,7 @@ fun HudOverlay(
                         fontWeight = FontWeight.SemiBold,
                     )
                     !session.baselineReady -> Text(
-                        if (!session.logOpened) {
-                            "① 게임에서 로그 오픈을 해주세요"
-                        } else {
-                            "② 가방 정렬을 눌러주세요"
-                        },
+                        "게임에서 로그 오픈 후 가방 정렬을 눌러주세요",
                         color = Color(0xFFFBBF24),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,

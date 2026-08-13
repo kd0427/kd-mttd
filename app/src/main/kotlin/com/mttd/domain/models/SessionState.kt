@@ -56,9 +56,6 @@ data class SessionState(
      * false 이면 UI 에 "가방 정렬 대기 중" 안내를 띄운다.
      */
     val baselineReady: Boolean = false,
-    /** 앱이 시작된 뒤 게임 로그의 새 줄을 한 번이라도 수신했는지. 초기 안내의 1단계다. */
-    val logOpened: Boolean = false,
-
     /** 사용자 일시정지 상태. true 이면 경과 시간·픽업·수익 계산 일시 중단. */
     val paused: Boolean = false,
     /** 지금까지 누적된 일시정지 시간 (ms). elapsedMs 계산에서 빼줌. */

@@ -149,10 +149,8 @@ fun IconOverlay(
         // 항목이 적을 때만 기본 폭에서 멈춰 패널이 함께 짧아진다.
         .coerceAtMost(64f)
         .dp
-    val fillsMaxWidth = metricWidth < 64.dp
-
     Box(
-        modifier = (if (fillsMaxWidth) Modifier.fillMaxWidth() else Modifier.wrapContentSize())
+        modifier = Modifier.wrapContentSize()
             .background(Color(0xFF0F172A).copy(alpha = 0.9f), RoundedCornerShape(14.dp))
             .border(1.dp, Color(0xFFE2E8F0).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
             .padding(horizontal = 5.dp, vertical = 3.dp),
@@ -168,16 +166,14 @@ fun IconOverlay(
             }
             val status = when {
                 session.paused -> "중지중"
-                !session.logOpened -> "로그 오픈"
-                // 기준 가방 스냅샷이 아직 없으면 수익/시간 계산을 시작할 수 없다.
-                !session.baselineReady -> "가방 정리"
+                !session.baselineReady -> "로그·가방"
                 session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "대기중"
                 else -> "진행중"
             }
             val statusColor = when (status) {
                 "진행중" -> Color(0xFF4ADE80)
                 "중지중" -> Color(0xFFF87171)
-                "로그 오픈", "가방 정리" -> Color(0xFFFB923C)
+                "로그·가방" -> Color(0xFFFB923C)
                 else -> Color(0xFF94A3B8) // 대기중
             }
             SummaryStatus(
@@ -231,7 +227,7 @@ private fun SummaryStatus(status: String, color: Color) {
             Text(
                 status,
                 color = color,
-                fontSize = if (status == "로그 오픈" || status == "가방 정리") 8.sp else 9.sp,
+                fontSize = if (status == "로그·가방") 8.sp else 9.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
             )

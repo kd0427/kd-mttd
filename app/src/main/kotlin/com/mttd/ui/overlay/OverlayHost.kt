@@ -61,7 +61,7 @@ class OverlayHost(
 
     // 접힌 상태도 핵심 수치를 읽을 수 있는 가로 요약 바.
     private val iconParams = defaultParams(
-        (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260)),
+        WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
     ).apply {
         gravity = Gravity.TOP or Gravity.START
@@ -116,7 +116,7 @@ class OverlayHost(
             IconOverlay(
                 sessionState = sessionState,
                 metricFlow = prefs.miniPanelMetrics,
-                maxPanelWidthPx = iconParams.width,
+                maxPanelWidthPx = (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260)),
                 onTogglePause = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.togglePause()
                 },
@@ -245,12 +245,11 @@ class OverlayHost(
         ownScope.launch { prefs.setHudAlpha(alpha) }
     }
 
-    /** 회전 시 실제 화면 폭을 다시 읽어 미니패널의 최대 폭을 갱신한다. */
+    /** 회전 시 Compose가 새 화면 폭으로 다시 측정되도록 미니패널을 마운트한다. */
     fun onDisplayConfigurationChanged() {
         if (iconView == null) return
         iconView?.let { safeRemove(it) }
         iconView = null
-        iconParams.width = (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260))
         mountIcon()
     }
 

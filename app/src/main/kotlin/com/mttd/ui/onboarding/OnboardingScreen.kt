@@ -197,7 +197,7 @@ fun OnboardingScreen(
  * 새 버전 알림 배너. 두 탭 모두 위에 뜬다.
  *
  * 확인은 서비스 시작 시 1회만 하고, 여기서는 결과만 표시한다.
- * 설치는 하지 않고 릴리스 페이지를 열어준다 ([UpdateChecker] 주석 참조).
+ * APK는 앱 안에서 받은 뒤 Android 시스템 업데이트 화면으로 넘긴다.
  */
 @Composable
 private fun UpdateBanner() {
@@ -211,6 +211,9 @@ private fun UpdateBanner() {
     val u = update ?: return
     var dismissed by remember(u.versionName) { mutableStateOf(false) }
     if (dismissed) return
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var installing by remember(u.versionName) { mutableStateOf(false) }
+    var installMessage by remember(u.versionName) { mutableStateOf<String?>(null) }
     // 기본은 접힘 — 새 버전이 있다는 것만 한 줄로 알리고, 자세한 내용은 탭해서 펼쳐 보게.
     var expanded by remember(u.versionName) { mutableStateOf(false) }
 
@@ -246,14 +249,51 @@ private fun UpdateBanner() {
                     Text(parseSimpleMarkdown(u.notes), style = MaterialTheme.typography.bodySmall, maxLines = 6)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        val i = android.content.Intent(
-                            android.content.Intent.ACTION_VIEW,
-                            android.net.Uri.parse(u.apkUrl ?: u.releaseUrl),
-                        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(i)
-                    }) { Text(if (u.apkUrl != null) "APK 다운로드" else "릴리스 열기") }
+                    if (u.apkUrl != null) {
+                        Button(
+                            enabled = !installing,
+                            onClick = {
+                                scope.launch {
+                                    installing = true
+                                    installMessage = when (
+                                        val result = com.mttd.data.update.AppUpdateInstaller
+                                            .downloadAndInstall(context.applicationContext, u.apkUrl)
+                                    ) {
+                                        com.mttd.data.update.AppUpdateInstaller.Result.InstallerOpened ->
+                                            "시스템 업데이트 화면을 열었습니다. '업데이트'를 눌러 적용하세요."
+                                        com.mttd.data.update.AppUpdateInstaller.Result.PermissionSettingsOpened ->
+                                            "설정에서 '이 출처 허용'을 켠 뒤 다시 눌러주세요."
+                                        is com.mttd.data.update.AppUpdateInstaller.Result.Failed -> result.message
+                                    }
+                                    installing = false
+                                }
+                            },
+                        ) {
+                            if (installing) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(6.dp))
+                                Text("준비 중...")
+                            } else {
+                                Text("앱에서 업데이트")
+                            }
+                        }
+                    } else {
+                        Button(onClick = {
+                            val i = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(u.releaseUrl),
+                            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(i)
+                        }) { Text("릴리스 열기") }
+                    }
                     OutlinedButton(onClick = { dismissed = true }) { Text("나중에") }
+                }
+                installMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

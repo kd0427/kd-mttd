@@ -118,7 +118,8 @@ fun IconOverlay(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            // 항목 묶음을 가운데에 고정해 양끝 여백을 같게 한다.
+            horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
         ) {
             val primaryColor = when {
                 session.paused -> Color(0xFFFBBF24)

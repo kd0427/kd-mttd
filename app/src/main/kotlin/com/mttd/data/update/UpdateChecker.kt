@@ -18,11 +18,8 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
 
 /**
- * GitHub Releases 기반 업데이트 확인 — **알림만 하고 설치는 하지 않는다.**
- *
- * 자동 설치를 하려면 `REQUEST_INSTALL_PACKAGES` 를 받거나 Shizuku 로 `pm install` 을 돌려야 하는데,
- * 이 앱은 shell 권한 프로세스([com.mttd.service.UserService])를 **읽기 전용**으로 유지하는 게
- * 원칙이라 그 경로를 열지 않는다. 자동 업데이트가 필요하면 Obtainium 같은 외부 도구를 쓰면 된다.
+ * GitHub Releases 기반 업데이트 확인. 새 버전이 있으면 [AppUpdateInstaller]가 APK를 앱 안에서
+ * 내려받아 Android의 시스템 업데이트 확인 창으로 넘긴다.
  *
  * 비교는 `versionName` ↔ 릴리스 태그(`vX.Y.Z`) 의 semver 비교.
  */

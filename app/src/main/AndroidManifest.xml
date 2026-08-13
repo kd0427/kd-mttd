@@ -4,6 +4,8 @@
     <!-- ================= 권한 ================= -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- GitHub에서 받은 서명 APK를 시스템 업데이트 화면으로 넘긴다. 최종 설치 승인은 사용자가 한다. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Shizuku V3 -->
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
@@ -52,6 +54,16 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_file_paths" />
+        </provider>
 
         <meta-data
             android:name="moe.shizuku.client.V3_SUPPORT"

@@ -1163,13 +1163,16 @@ private fun UpdateCheckButton() {
     val service by app.trackerService.collectAsStateWithLifecycle()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
+    var resultLabel by remember { mutableStateOf<String?>(null) }
 
     OutlinedButton(
         onClick = {
             val svc = service ?: return@OutlinedButton
             checking = true
+            resultLabel = null
             scope.launch {
                 svc.checkForUpdate()
+                resultLabel = if (svc.availableUpdate.value == null) "현재 최신 버전" else "새 버전 있음"
                 checking = false
             }
         },
@@ -1183,7 +1186,7 @@ private fun UpdateCheckButton() {
         }
         Spacer(Modifier.width(6.dp))
         Text(
-            if (checking) "확인 중..." else "업데이트 확인",
+            if (checking) "확인 중..." else resultLabel ?: "업데이트 확인",
             style = MaterialTheme.typography.labelMedium,
         )
     }

@@ -58,7 +58,8 @@ class OverlayHost(
     private var iconView: ComposeView? = null
     private var hudView: ComposeView? = null
 
-    private val iconParams = defaultParams(dip(56), dip(56)).apply {
+    // 접힌 상태도 핵심 수치를 읽을 수 있는 가로 요약 바.
+    private val iconParams = defaultParams(dip(300), dip(52)).apply {
         gravity = Gravity.TOP or Gravity.START
     }
     // 높이는 WRAP_CONTENT — 고정 높이면 해상도/글꼴 배율에 따라 아래가 잘리고,

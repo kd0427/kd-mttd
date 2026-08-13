@@ -1,16 +1,19 @@
 package com.mttd.ui.overlay
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,17 +60,14 @@ enum class BadgeIncomeMetric(val id: String, val label: String, val perHour: Boo
     }
 }
 
-/**
- * 최소화 뷰. 경과 시간 + 수익 지표 ([metricFlow] 로 선택, 기본은 시간당 수익).
- */
+/** 접힌 상태의 가로 요약 바. 탭하면 상세 HUD가 열리고, 길게 누르면 위치를 옮긴다. */
 @Composable
 fun IconOverlay(
     sessionState: StateFlow<SessionState>,
+    @Suppress("UNUSED_PARAMETER")
     metricFlow: Flow<String> = flowOf(BadgeIncomeMetric.DEFAULT.id),
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
-    val metricId by metricFlow.collectAsStateWithLifecycle(initialValue = BadgeIncomeMetric.DEFAULT.id)
-    val metric = remember(metricId) { BadgeIncomeMetric.fromId(metricId) }
 
     // 경과 시간을 흘려보내기 위한 1 초 틱.
     // 예전엔 `while (true)` 라 일시정지·집계 대기 상태에서도 영원히 깨어나
@@ -81,56 +81,66 @@ fun IconOverlay(
     val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, tick) {
         session.elapsedMs
     }
-    val income = remember(
-        session.totalValue, session.netTotalValue, session.currentMapValue,
-        session.active, session.endedAtMs, session.paused, tick, metric,
-    ) {
-        metric.value(session)
+    val perHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, tick) {
+        session.incomePerHour
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0F172A).copy(alpha = 0.85f), CircleShape)
-            .padding(4.dp),
+            .background(Color(0xFF0F172A).copy(alpha = 0.9f), RoundedCornerShape(14.dp))
+            .border(1.dp, Color(0xFFE2E8F0).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             val primaryColor = when {
                 session.paused -> Color(0xFFFBBF24)
                 elapsed > 0 -> Color(0xFF4ADE80)
                 else -> Color(0xFFCBD5E1)
             }
-            val label = when {
+            val status = when {
                 session.paused -> "❚❚"
-                elapsed > 0 -> formatElapsedIcon(elapsed)
-                else -> "대기"
+                session.active -> "●"
+                else -> "○"
             }
             Text(
-                label,
+                status,
                 color = primaryColor,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
             )
-            run {
-                val incomeText = formatFire(income) + if (metric.perHour) "/h" else ""
-                // 결정 아이콘을 빼고 그 공간만큼 숫자를 키운다. 그래도 자릿수가 아주 많으면
-                // (5자리 이상 시간당 수익 등) 줄여서 "/h" 가 잘리지 않게 한다.
-                val incomeFontSize = if (incomeText.length > 8) 9.sp else 12.sp
-                Text(
-                    incomeText,
-                    color = if (session.paused) Color(0xFF94A3B8) else Color(0xFFFB923C),
-                    fontSize = incomeFontSize,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                )
-            }
+            SummaryMetric("경과", if (elapsed > 0) formatElapsedIcon(elapsed) else "대기", primaryColor)
+            SummaryMetric("총", formatFire(session.totalValue), valueColor(session.totalValue))
+            SummaryMetric("시간당", formatFire(perHour) + "/h", valueColor(perHour))
+            SummaryMetric("이번 맵", formatFire(session.currentMapValue), valueColor(session.currentMapValue))
         }
     }
+}
+
+@Composable
+private fun SummaryMetric(label: String, value: String, color: Color) {
+    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, color = Color(0xFF94A3B8), fontSize = 8.sp, maxLines = 1)
+        Text(
+            value,
+            color = color,
+            fontSize = if (value.length > 9) 9.sp else 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
+
+private fun valueColor(value: Double): Color = when {
+    value < 0 -> Color(0xFFF87171)
+    value > 0 -> Color(0xFF4ADE80)
+    else -> Color(0xFFCBD5E1)
 }
 
 /** 아이콘용 짧은 경과 포맷: 1h 미만은 mm:ss, 이상은 h:mm. */

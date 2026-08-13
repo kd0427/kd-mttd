@@ -45,7 +45,7 @@ Shizuku가 이미 돌고 있다면 다음 단계로 넘어가면 된다.
 
 ### 2. APK 설치
 
-이 개인 포크에서 빌드한 `kd-mttd-x.y.z-release.apk`를 기기로 복사한 뒤, 파일 관리자에서 실행 →
+GitHub의 **Releases**에서 버전별 `kd-mttd-x.y.z-release.apk`를 내려받아 기기로 복사한 뒤, 파일 관리자에서 실행 →
 "출처를 알 수 없는 앱" 허용.
 
 ### 3. 최초 실행 설정
@@ -132,8 +132,8 @@ Shizuku가 이미 돌고 있다면 다음 단계로 넘어가면 된다.
 
 ## 업데이트
 
-개인 GitHub 저장소를 만든 뒤 빌드할 때 `-PupdateRepo=owner/repository`를 지정하면 앱 시작 시
-GitHub Releases를 1회 조회해 새 버전이 있으면 배너로 알린다. 기본값은 비활성화다. **설치는 하지 않는다** —
+이 저장소의 버전 tag를 push하면 GitHub Actions가 release APK를 빌드해 GitHub Releases에 올린다.
+앱 시작 시 GitHub Releases를 1회 조회해 새 버전이 있으면 배너로 알린다. **설치는 하지 않는다** —
 자동 설치를 하려면 `UserService` 에 APK 설치 능력을 줘야 하는데, 읽기 전용 원칙을 지키기 위해
 그 경로는 열지 않았다. 자동 업데이트를 원하면 [Obtainium](https://github.com/ImranR98/Obtainium)
 같은 도구에 자신의 저장소를 등록하면 된다.

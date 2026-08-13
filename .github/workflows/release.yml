@@ -1,0 +1,54 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish APK
+    runs-on: ubuntu-latest
+    env:
+      UPDATE_REPO: kd0427/kd-mttd
+      KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Restore signing key
+        shell: bash
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          test -n "$KEYSTORE_PASSWORD"
+          test -n "$KEY_ALIAS"
+          test -n "$KEY_PASSWORD"
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.jks
+          cat > keystore.properties <<EOF
+          storeFile=release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Build signed release APK
+        run: ./gradlew :app:assembleRelease -PupdateRepo="$UPDATE_REPO"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: app/build/outputs/apk/release/*.apk

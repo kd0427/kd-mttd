@@ -3,6 +3,7 @@ package com.mttd.ui.overlay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,11 +38,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -52,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.mttd.domain.models.SessionState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 
 /** 목록에 한 번에 보일 줄 수. 이보다 많으면 목록 안에서 스크롤. */
@@ -124,9 +130,8 @@ fun HudOverlay(
                         onTogglePause,
                     )
                     Spacer(Modifier.width(3.dp))
-                    // 리셋은 즉시 실행한다. 이전 롱프레스 전용 동작은 일반 탭에서 아무 반응이
-                    // 없어 보이는 문제가 있어 상세 HUD의 다른 조작과 같은 탭 방식으로 통일한다.
-                    HudMaterialIconButton(Icons.Filled.Refresh, onReset)
+                    // 초기화는 1초간 길게 눌러야 실행된다.
+                    HudLongPressIconButton(Icons.Filled.Refresh, onReset)
                 }
                 Spacer(Modifier.width(3.dp))
                 HudMaterialIconButton(Icons.Filled.Close, onCollapse)
@@ -403,3 +408,36 @@ internal fun formatFire(v: Double): String {
         else -> "%,.0f".format(v)
     }
 }
+/** 실수 방지를 위해 1초 롱프레스에서만 초기화하는 아이콘 버튼. */
+@Composable
+private fun HudLongPressIconButton(icon: ImageVector, onLongClick: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .pointerInput(onLongClick) {
+                detectTapGestures(
+                    onPress = {
+                        val armed = scope.launch {
+                            delay(LONG_PRESS_MS)
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onLongClick()
+                        }
+                        tryAwaitRelease()
+                        armed.cancel()
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = "1초 길게 눌러 초기화",
+            tint = Color(0xFFF87171),
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+private const val LONG_PRESS_MS = 1_000L

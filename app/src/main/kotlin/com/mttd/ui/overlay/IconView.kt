@@ -3,6 +3,7 @@ package com.mttd.ui.overlay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,16 +26,22 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mttd.domain.models.SessionState
+import com.mttd.BuildConfig
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -71,6 +79,7 @@ fun IconOverlay(
     @Suppress("UNUSED_PARAMETER")
     metricFlow: Flow<String> = flowOf(BadgeIncomeMetric.DEFAULT.id),
     onTogglePause: () -> Unit = {},
+    onReset: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
 
@@ -88,6 +97,11 @@ fun IconOverlay(
     }
     val perHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, tick) {
         session.incomePerHour
+    }
+    val currentMapElapsed = remember(session.runs, tick) {
+        session.runs.lastOrNull { it.inProgress }
+            ?.let { (System.currentTimeMillis() - it.startedAtMs).coerceAtLeast(0) }
+            ?: 0L
     }
 
     Box(
@@ -108,33 +122,37 @@ fun IconOverlay(
                 elapsed > 0 -> Color(0xFF4ADE80)
                 else -> Color(0xFFCBD5E1)
             }
-            val status = when {
-                session.paused -> "❚❚"
-                session.active -> "●"
-                else -> "○"
-            }
             Text(
-                status,
-                color = primaryColor,
-                fontSize = 14.sp,
+                "고인물 v${BuildConfig.VERSION_NAME}",
+                color = Color(0xFFFB923C),
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
             )
+            Text(
+                "${session.mapsEntered}회",
+                color = primaryColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            SummaryMetric("현재 맵", formatElapsedIcon(currentMapElapsed), primaryColor)
+            SummaryMetric("총 수익", formatFire(session.totalValue), valueColor(session.totalValue))
+            SummaryMetric("총 시간", if (elapsed > 0) formatElapsedIcon(elapsed) else "대기", primaryColor)
+            SummaryMetric("시간당", formatFire(perHour) + "/h", valueColor(perHour))
+            SummaryMetric("이번 맵", formatFire(session.currentMapValue), valueColor(session.currentMapValue))
             SummaryPauseButton(
                 paused = session.paused,
                 onClick = onTogglePause,
             )
-            SummaryMetric("경과", if (elapsed > 0) formatElapsedIcon(elapsed) else "대기", primaryColor)
-            SummaryMetric("총", formatFire(session.totalValue), valueColor(session.totalValue))
-            SummaryMetric("시간당", formatFire(perHour) + "/h", valueColor(perHour))
-            SummaryMetric("이번 맵", formatFire(session.currentMapValue), valueColor(session.currentMapValue))
+            SummaryResetButton(onReset)
         }
     }
 }
 
 @Composable
 private fun SummaryMetric(label: String, value: String, color: Color) {
-    Column(modifier = Modifier.width(52.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = Modifier.width(56.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = Color(0xFF94A3B8), fontSize = 8.sp, maxLines = 1)
         Text(
             value,
@@ -145,6 +163,40 @@ private fun SummaryMetric(label: String, value: String, color: Color) {
         )
     }
 }
+
+@Composable
+private fun SummaryResetButton(onReset: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(Color(0xFF3F1D2E), RoundedCornerShape(7.dp))
+            .pointerInput(onReset) {
+                detectTapGestures(
+                    onPress = {
+                        val armed = scope.launch {
+                            delay(SUMMARY_RESET_LONG_PRESS_MS)
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onReset()
+                        }
+                        tryAwaitRelease()
+                        armed.cancel()
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Refresh,
+            contentDescription = "1초 길게 눌러 초기화",
+            tint = Color(0xFFF87171),
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+private const val SUMMARY_RESET_LONG_PRESS_MS = 1_000L
 
 @Composable
 private fun SummaryPauseButton(paused: Boolean, onClick: () -> Unit) {

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -125,7 +124,7 @@ fun IconOverlay(
 
 @Composable
 private fun SummaryMetric(label: String, value: String, color: Color) {
-    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = Modifier.width(58.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = Color(0xFF94A3B8), fontSize = 8.sp, maxLines = 1)
         Text(
             value,

@@ -46,13 +46,19 @@ class UpdateChecker {
             val req = Request.Builder()
                 .url(url)
                 .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "kd-mTTD/${BuildConfig.VERSION_NAME} (Android)")
                 .get()
                 .build()
             val resp = client.newCall(req).awaitResponse()
             val body = resp.use { r ->
                 if (!r.isSuccessful) {
                     Log.i(TAG, "check failed: HTTP ${r.code}")
-                    return@withContext CheckResult.Failed("GitHub 응답 오류 (HTTP ${r.code})")
+                    val message = if (r.code == 403) {
+                        "GitHub 요청 한도에 도달했습니다. 잠시 뒤 다시 시도하세요 (HTTP 403)"
+                    } else {
+                        "GitHub 응답 오류 (HTTP ${r.code})"
+                    }
+                    return@withContext CheckResult.Failed(message)
                 }
                 r.body?.string() ?: return@withContext CheckResult.Failed("GitHub 응답이 비어 있습니다")
             }

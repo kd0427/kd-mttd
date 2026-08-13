@@ -46,6 +46,11 @@ object AppUpdateInstaller {
 
         val apkFile = try {
             withContext(Dispatchers.IO) { download(context, apkUrl) }
+        } catch (e: HttpStatusException) {
+            return Result.Failed(
+                if (e.code == 403) "GitHub 다운로드가 거부되었습니다. 잠시 뒤 다시 시도하세요 (HTTP 403)"
+                else "업데이트 APK 다운로드에 실패했습니다 (HTTP ${e.code})",
+            )
         } catch (_: IOException) {
             return Result.Failed("업데이트 APK 다운로드에 실패했습니다")
         } catch (_: Throwable) {
@@ -78,8 +83,15 @@ object AppUpdateInstaller {
         val partial = File(dir, "update.apk.part")
         partial.delete()
 
-        client.newCall(Request.Builder().url(apkUrl).get().build()).execute().use { response ->
-            if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+        client.newCall(
+            Request.Builder()
+                .url(apkUrl)
+                .header("Accept", "application/vnd.android.package-archive, application/octet-stream")
+                .header("User-Agent", "kd-mTTD updater/1.0 (Android)")
+                .get()
+                .build(),
+        ).execute().use { response ->
+            if (!response.isSuccessful) throw HttpStatusException(response.code)
             val body = response.body ?: throw IOException("empty body")
             body.byteStream().use { input ->
                 partial.outputStream().buffered().use { output -> input.copyTo(output) }
@@ -93,4 +105,6 @@ object AppUpdateInstaller {
     }
 
     private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
+
+    private class HttpStatusException(val code: Int) : IOException("HTTP $code")
 }

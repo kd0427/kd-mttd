@@ -131,8 +131,9 @@ fun IconOverlay(
             }
             val status = when {
                 session.paused -> "중지중"
-                !session.baselineReady ||
-                    (session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap) -> "대기중"
+                // 기준 가방 스냅샷이 아직 없으면 로그가 연결돼도 수익/시간 계산을 시작할 수 없다.
+                !session.baselineReady -> "로그·가방 정리"
+                session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "대기중"
                 else -> "진행중"
             }
             val statusColor = when (status) {
@@ -170,7 +171,24 @@ private fun SummaryStatus(version: String, status: String, color: Color) {
             fontWeight = FontWeight.Bold,
             maxLines = 1,
         )
-        Text(status, color = color, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 상태가 한눈에 들어오도록 신호등처럼 색 원을 함께 표시한다.
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .background(color, RoundedCornerShape(50)),
+            )
+            Text(
+                status,
+                color = color,
+                fontSize = if (status == "로그·가방 정리") 8.sp else 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
     }
 }
 

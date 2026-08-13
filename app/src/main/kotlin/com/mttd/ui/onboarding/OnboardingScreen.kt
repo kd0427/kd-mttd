@@ -542,6 +542,7 @@ private fun ShizukuStatusCard(
     state: ShizukuState,
     onRequestPermission: () -> Unit,
 ) {
+    val context = LocalContext.current
     var expanded by remember { mutableStateOf(false) }
     // 다 준비된 상태에선 매번 4줄 상세를 보여줄 필요가 없어 한 줄 요약으로 접어둔다.
     // 뭔가 문제가 있을 땐(하나라도 false) 바로 뭘 고쳐야 하는지 보여야 하니 항상 펼쳐둔다.
@@ -577,19 +578,29 @@ private fun ShizukuStatusCard(
                 StatusRow("권한 허용", state.permission)
                 StatusRow("UserService 바인딩", state.userServiceBound)
                 Spacer(Modifier.height(4.dp))
-                Button(
-                    onClick = onRequestPermission,
-                    enabled = state.installed,
-                ) {
-                    Text(
-                        when {
-                            !state.installed -> "Shizuku 미설치 (재확인)"
-                            !state.binderAlive -> "Shizuku 실행 후 재확인"
-                            !state.permission -> "권한 요청"
-                            !state.userServiceBound -> "UserService 재바인딩"
-                            else -> "이미 준비됨"
-                        }
-                    )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = onRequestPermission,
+                        enabled = state.installed,
+                    ) {
+                        Text(
+                            when {
+                                !state.installed -> "Shizuku 미설치"
+                                !state.binderAlive -> "Shizuku 실행 후 재확인"
+                                !state.permission -> "권한 요청"
+                                !state.userServiceBound -> "UserService 재바인딩"
+                                else -> "이미 준비됨"
+                            }
+                        )
+                    }
+                    OutlinedButton(onClick = {
+                        context.startActivity(
+                            android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse("https://github.com/RikkaApps/Shizuku/releases"),
+                            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }) { Text("APK 다운로드") }
                 }
             }
         }

@@ -2,6 +2,7 @@ package com.mttd.ui.overlay
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,6 +70,7 @@ fun IconOverlay(
     sessionState: StateFlow<SessionState>,
     @Suppress("UNUSED_PARAMETER")
     metricFlow: Flow<String> = flowOf(BadgeIncomeMetric.DEFAULT.id),
+    onTogglePause: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
 
@@ -114,6 +120,10 @@ fun IconOverlay(
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
             )
+            SummaryPauseButton(
+                paused = session.paused,
+                onClick = onTogglePause,
+            )
             SummaryMetric("경과", if (elapsed > 0) formatElapsedIcon(elapsed) else "대기", primaryColor)
             SummaryMetric("총", formatFire(session.totalValue), valueColor(session.totalValue))
             SummaryMetric("시간당", formatFire(perHour) + "/h", valueColor(perHour))
@@ -124,7 +134,7 @@ fun IconOverlay(
 
 @Composable
 private fun SummaryMetric(label: String, value: String, color: Color) {
-    Column(modifier = Modifier.width(58.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = Modifier.width(52.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, color = Color(0xFF94A3B8), fontSize = 8.sp, maxLines = 1)
         Text(
             value,
@@ -132,6 +142,24 @@ private fun SummaryMetric(label: String, value: String, color: Color) {
             fontSize = if (value.length > 9) 9.sp else 11.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun SummaryPauseButton(paused: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(Color(0xFF1E293B), RoundedCornerShape(7.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+            contentDescription = if (paused) "재생" else "일시정지",
+            tint = if (paused) Color(0xFF4ADE80) else Color(0xFFFBBF24),
+            modifier = Modifier.size(16.dp),
         )
     }
 }

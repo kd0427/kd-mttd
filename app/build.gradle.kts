@@ -28,8 +28,8 @@ android {
         targetSdk = 34
         // 릴리스마다 반드시 올릴 것. 안 올리면 시스템이 업데이트로 인식하지 않는다.
         // versionName 은 GitHub 릴리스 태그(vX.Y.Z)와 맞춘다 — 인앱 업데이트 확인이 이걸로 비교.
-        versionCode = 16
-        versionName = "0.3.6-kd"
+        versionCode = 17
+        versionName = "0.3.7-kd"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -98,7 +98,7 @@ android {
 }
 
 // 산출물 파일명 — 기본값(app-release.apk)은 어떤 앱인지, 무슨 버전인지 알 수 없다.
-// -> kd-mttd-0.3.6-kd-release.apk / kd-mttd-0.3.6-kd-debug.apk
+// -> kd-mttd-0.3.7-kd-release.apk / kd-mttd-0.3.7-kd-debug.apk
 // (파일명은 설치·업데이트 판단과 무관 — 안드로이드는 applicationId + 서명만 본다.)
 base {
     archivesName.set("kd-mttd-${android.defaultConfig.versionName}")

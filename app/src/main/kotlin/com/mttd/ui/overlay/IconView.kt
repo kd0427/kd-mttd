@@ -138,8 +138,9 @@ fun IconOverlay(
             }
             val statusColor = when (status) {
                 "진행중" -> Color(0xFF4ADE80)
-                "중지중" -> Color(0xFFFBBF24)
-                else -> Color(0xFF94A3B8)
+                "중지중" -> Color(0xFFF87171)
+                "로그·가방 정리" -> Color(0xFFFB923C)
+                else -> Color(0xFF94A3B8) // 대기중
             }
             SummaryStatus(
                 version = "고인물 v${BuildConfig.VERSION_NAME.substringBefore('-')}",

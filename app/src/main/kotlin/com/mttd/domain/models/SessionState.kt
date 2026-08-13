@@ -101,7 +101,13 @@ data class SessionState(
                     (raw - pausedAccumulatedMs - currentPauseChunk).coerceAtLeast(0)
                 }
                 TimeTrackingMode.MAP_ONLY -> {
-                    val currentMapChunk = mapElapsedSinceMs?.let { now - it } ?: 0
+                    // 이탈 로그의 순서가 뒤섞여 `mapElapsedSinceMs`가 잠시 남더라도,
+                    // 맵 밖 상태에서는 절대로 현재 시각을 더하지 않는다.
+                    val currentMapChunk = if (inMap && !paused) {
+                        mapElapsedSinceMs?.let { now - it } ?: 0
+                    } else {
+                        0
+                    }
                     (mapElapsedAccumulatedMs + currentMapChunk).coerceAtLeast(0)
                 }
             }
@@ -121,7 +127,12 @@ data class SessionState(
     val currentMapElapsedMs: Long
         get() {
             if (!active || !baselineReady) return 0
-            val currentChunk = currentMapElapsedSinceMs?.let { System.currentTimeMillis() - it } ?: 0
+            // 총 시간과 동일하게 맵 밖·일시정지 상태에서는 동적 시간을 추가하지 않는다.
+            val currentChunk = if (inMap && !paused) {
+                currentMapElapsedSinceMs?.let { System.currentTimeMillis() - it } ?: 0
+            } else {
+                0
+            }
             return (currentMapElapsedAccumulatedMs + currentChunk).coerceAtLeast(0)
         }
 

@@ -126,7 +126,7 @@ fun IconOverlay(
         ) {
             val primaryColor = when {
                 session.paused -> Color(0xFFFBBF24)
-                elapsed > 0 -> Color(0xFF4ADE80)
+                session.inMap -> Color(0xFF4ADE80)
                 else -> Color(0xFFCBD5E1)
             }
             val status = when {

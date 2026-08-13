@@ -40,6 +40,9 @@ class UpdateChecker {
      *         네트워크 실패 등은 null 로 삼킨다 (업데이트 확인 실패로 앱을 방해하지 않음).
      */
     suspend fun check(): Update? = withContext(Dispatchers.IO) {
+        // 이 커스텀 포크는 원본의 릴리스를 업데이트로 제시하지 않는다. 개인 저장소를
+        // 만들기 전에는 네트워크 요청도 하지 않는다.
+        if (BuildConfig.UPDATE_REPO.isBlank()) return@withContext null
         try {
             val url = "https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest"
             val req = Request.Builder()

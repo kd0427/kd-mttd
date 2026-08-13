@@ -1,4 +1,4 @@
-# mTTD (Android) 빌드 가이드
+# KD mTTD (Android) 빌드 가이드
 
 소스에서 직접 빌드해서 설치하려는 개발자·기여자용 문서다. GitHub Release APK 를
 받아 쓰는 일반 사용자는 **[README.md](README.md)** 의 "설치와 사용법"을 참고하면 된다
@@ -11,7 +11,7 @@
 | 항목 | 요구사항 |
 |---|---|
 | JDK | 17 |
-| Android SDK | `local.properties` 에 `sdk.dir` 지정 필요 |
+| Android SDK | Platform 34, Build-Tools 34.0.0 |
 | 기기 | Android 10 (API 29) 이상, 게임 설치됨, Shizuku 준비됨 |
 
 ---
@@ -19,16 +19,28 @@
 ## 2. 소스 빌드
 
 ```bash
-git clone https://github.com/listil/mttd
-cd mttd
+cd kd-mttd
 
-# Android SDK 경로 지정 (환경에 맞게 수정)
-echo "sdk.dir=$HOME/Library/Android/sdk" > local.properties
+# JDK 17 경로 지정 (Homebrew openjdk@17 기준)
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export PATH="$JAVA_HOME/bin:$PATH"
+
+# Android SDK 경로 지정 (이 환경의 command-line tools 설치 경로)
+echo "sdk.dir=/opt/homebrew/share/android-commandlinetools" > local.properties
 
 ./gradlew :app:assembleDebug
 ```
 
-산출물은 `app/build/outputs/apk/debug/app-debug.apk`.
+산출물은 `app/build/outputs/apk/debug/kd-mttd-0.3.4-kd-debug.apk`.
+
+Android SDK 구성요소가 아직 없다면, Google SDK 라이선스를 검토·수락한 뒤 설치한다.
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+yes | sdkmanager --sdk_root=/opt/homebrew/share/android-commandlinetools --licenses
+sdkmanager --sdk_root=/opt/homebrew/share/android-commandlinetools \
+  "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+```
 
 ### 릴리스 빌드
 
@@ -45,6 +57,14 @@ keyPassword=...
 ```bash
 ./gradlew :app:assembleRelease
 ```
+
+개인 GitHub 릴리스 업데이트 확인을 켜려면 빌드할 때 저장소를 지정한다.
+
+```bash
+./gradlew :app:assembleRelease -PupdateRepo=GITHUB_ID/REPOSITORY
+```
+
+지정하지 않으면 원본/외부 저장소를 조회하지 않는다.
 
 ---
 
@@ -63,10 +83,10 @@ adb -s 192.168.0.x:xxxxx install -r app-debug.apk
 
 설치가 제대로 됐는지 확인:
 ```bash
-adb shell dumpsys package com.mttd.debug | grep versionName
+adb shell dumpsys package com.doyoon.kdmttd.debug | grep versionName
 ```
 
-> debug 빌드는 패키지명이 `com.mttd.debug` 라 release 빌드(`com.mttd`)와
+> debug 빌드는 패키지명이 `com.doyoon.kdmttd.debug` 라 release 빌드(`com.doyoon.kdmttd`)와
 > 함께 설치할 수 있다.
 
 ---
@@ -115,9 +135,9 @@ adb shell ls -la /sdcard/Android/data/com.xd.TLglobal/files/UE4Game/UE_game/UE_g
 ## 5. 제거
 
 ```bash
-adb uninstall com.mttd.debug
+adb uninstall com.doyoon.kdmttd.debug
 # 릴리스 빌드라면
-adb uninstall com.mttd
+adb uninstall com.doyoon.kdmttd
 ```
 
 앱을 삭제하면 끝이다. 게임 쪽에는 아무것도 남기지 않는다. Shizuku 를 다른 앱에서 안 쓴다면

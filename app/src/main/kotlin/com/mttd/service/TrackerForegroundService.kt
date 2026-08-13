@@ -412,7 +412,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
                 nm.createNotificationChannel(
                     NotificationChannel(
                         CHANNEL_ID,
-                        "mTTD 로그 감시",
+                        "KD mTTD 로그 감시",
                         NotificationManager.IMPORTANCE_LOW,
                     ).apply { description = "게임 로그 파일을 폴링하는 백그라운드 서비스" }
                 )

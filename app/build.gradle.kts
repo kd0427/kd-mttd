@@ -17,22 +17,25 @@ val keystoreProps = Properties().apply {
 }
 
 android {
+    // Kotlin 소스의 기존 namespace는 유지한다. applicationId만 분리해 원본 앱과
+    // 공존 설치할 수 있게 한다.
     namespace = "com.mttd"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.mttd"
+        applicationId = "com.doyoon.kdmttd"
         minSdk = 29
         targetSdk = 34
         // 릴리스마다 반드시 올릴 것. 안 올리면 시스템이 업데이트로 인식하지 않는다.
         // versionName 은 GitHub 릴리스 태그(vX.Y.Z)와 맞춘다 — 인앱 업데이트 확인이 이걸로 비교.
         versionCode = 14
-        versionName = "0.3.4"
+        versionName = "0.3.4-kd"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // 인앱 업데이트 확인이 조회할 저장소.
-        buildConfigField("String", "UPDATE_REPO", "\"${project.findProperty("updateRepo") ?: "listil/mttd"}\"")
+        // 개인 GitHub 저장소를 만든 뒤 `-PupdateRepo=owner/repository` 로 지정한다.
+        // 빈 값은 업데이트 확인을 비활성화한다. 원본 저장소 릴리스를 안내하지 않는다.
+        buildConfigField("String", "UPDATE_REPO", "\"${project.findProperty("updateRepo") ?: ""}\"")
     }
 
     signingConfigs {
@@ -95,10 +98,10 @@ android {
 }
 
 // 산출물 파일명 — 기본값(app-release.apk)은 어떤 앱인지, 무슨 버전인지 알 수 없다.
-// -> mttd-0.2.1-release.apk / mttd-0.2.1-debug.apk
+// -> kd-mttd-0.3.4-kd-release.apk / kd-mttd-0.3.4-kd-debug.apk
 // (파일명은 설치·업데이트 판단과 무관 — 안드로이드는 applicationId + 서명만 본다.)
 base {
-    archivesName.set("mttd-${android.defaultConfig.versionName}")
+    archivesName.set("kd-mttd-${android.defaultConfig.versionName}")
 }
 
 protobuf {

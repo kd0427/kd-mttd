@@ -109,7 +109,7 @@ fun HudOverlay(
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("mTTD", color = Color(0xFFFB923C), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text("KD mTTD", color = Color(0xFFFB923C), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Spacer(Modifier.width(6.dp))
                 val statusText = when {
                     !session.active -> "대기"

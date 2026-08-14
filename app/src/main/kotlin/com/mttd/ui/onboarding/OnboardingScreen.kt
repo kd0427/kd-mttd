@@ -59,6 +59,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,6 +114,10 @@ fun OnboardingScreen(
 ) {
     var tab by remember { mutableStateOf(MainTab.EARNINGS) }
     val context = LocalContext.current
+    // "업데이트 확인" 을 눌러서 새 버전을 찾았을 때만 배너를 펼친다. 서비스가 시작할 때
+    // 자동으로 하는 확인에서는 예전처럼 접힌 채로 둔다 — 앱을 열 때마다 큰 카드가 펼쳐져
+    // 있으면 성가시다. 눌러서 찾을 때마다 다시 펼쳐야 하므로 Boolean 이 아니라 카운터다.
+    var expandUpdateSignal by remember { mutableIntStateOf(0) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -172,11 +177,9 @@ fun OnboardingScreen(
                         )
                     }
                     Box(modifier = Modifier.align(Alignment.TopEnd)) {
-                        UpdateCheckButton()
+                        UpdateCheckButton(onUpdateFound = { expandUpdateSignal++ })
                     }
                 }
-
-                UpdateBanner()
 
                 // 탭 트랙. 시안은 테두리 없이 인셋 배경만 쓴다.
                 Row(
@@ -203,6 +206,11 @@ fun OnboardingScreen(
             // 하나의 ScrollState 를 공유하면 한 탭에서 내려놓은 스크롤 위치가 다른 탭에도
             // 그대로 남아 위쪽 카드들이 화면 밖으로 밀려 안 보이는 문제가 있었다.
             val scrollState = remember(tab) { androidx.compose.foundation.ScrollState(0) }
+            // 배너를 펼칠 땐 이미 아래로 스크롤한 상태일 수 있다. 맨 위로 올려줘야
+            // "확인 버튼을 눌렀더니 바로 보인다" 가 성립한다.
+            LaunchedEffect(expandUpdateSignal) {
+                if (expandUpdateSignal > 0) scrollState.animateScrollTo(0)
+            }
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -210,6 +218,9 @@ fun OnboardingScreen(
                     .padding(horizontal = 20.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                // 헤더가 아니라 여기 둔다 — 헤더는 스크롤되지 않아서, 릴리스 노트가 긴 채로
+                // 펼치면 탭과 본문을 화면 밖으로 밀어내고 되돌릴 방법이 없다.
+                UpdateBanner(expandSignal = expandUpdateSignal)
                 when (tab) {
                     MainTab.EARNINGS -> {
                         if (!state.ready) {
@@ -280,11 +291,16 @@ private fun MainSegment(
 /**
  * 새 버전 알림 배너. 두 탭 모두 위에 뜬다.
  *
- * 확인은 서비스 시작 시 1회만 하고, 여기서는 결과만 표시한다.
+ * 확인은 서비스 시작 시 1회 자동으로 하고, 설정의 "업데이트 확인" 버튼으로도 부를 수 있다.
  * APK는 앱 안에서 받은 뒤 Android 시스템 업데이트 화면으로 넘긴다.
+ *
+ * @param expandSignal 0보다 커지면 배너를 펼친다. 사용자가 직접 "업데이트 확인" 을 눌러
+ *                     새 버전을 찾은 경우에만 증가하므로, 시작 시 자동 확인에서는 접힌 채로
+ *                     남는다. 눌렀다 접었다를 반복해도 매번 다시 펼치려면 Boolean 이 아니라
+ *                     값이 바뀌는 카운터여야 한다.
  */
 @Composable
-private fun UpdateBanner() {
+private fun UpdateBanner(expandSignal: Int = 0) {
     val context = LocalContext.current
     val app = context.applicationContext as TrackerApplication
     val service by app.trackerService.collectAsStateWithLifecycle()
@@ -294,12 +310,22 @@ private fun UpdateBanner() {
 
     val u = update ?: return
     var dismissed by remember(u.versionName) { mutableStateOf(false) }
-    if (dismissed) return
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var installing by remember(u.versionName) { mutableStateOf(false) }
     var installMessage by remember(u.versionName) { mutableStateOf<String?>(null) }
-    // 기본은 접힘 — 새 버전이 있다는 것만 한 줄로 알리고, 자세한 내용은 탭해서 펼쳐 보게.
+    // 기본은 접힘 — 시작할 때 자동으로 확인한 결과는 한 줄로만 알리고, 자세한 내용은 탭해서 보게.
     var expanded by remember(u.versionName) { mutableStateOf(false) }
+
+    // 사용자가 직접 "업데이트 확인" 을 눌러 새 버전을 찾았을 때. "나중에" 로 닫아뒀던 것도
+    // 같이 되살린다 — 버튼에는 새 버전이 떴는데 카드가 안 보이면 앞뒤가 안 맞는다.
+    // early return 보다 앞에 둬야 닫힌 상태에서도 이 신호를 받을 수 있다.
+    LaunchedEffect(expandSignal) {
+        if (expandSignal > 0) {
+            dismissed = false
+            expanded = true
+        }
+    }
+    if (dismissed) return
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1813,7 +1839,7 @@ private fun formatUpdatedAgo(ms: Long): String {
  * 아이콘 하나만 있을 땐 눈에 잘 안 띈다는 피드백을 받아 텍스트 라벨이 있는 버튼으로 바꿨다.
  */
 @Composable
-private fun UpdateCheckButton() {
+private fun UpdateCheckButton(onUpdateFound: () -> Unit = {}) {
     val context = LocalContext.current
     val app = context.applicationContext as TrackerApplication
     val service by app.trackerService.collectAsStateWithLifecycle()
@@ -1828,8 +1854,12 @@ private fun UpdateCheckButton() {
             resultLabel = null
             scope.launch {
                 resultLabel = when (val result = svc.checkForUpdate()) {
-                    is com.mttd.data.update.UpdateChecker.CheckResult.UpdateAvailable ->
+                    is com.mttd.data.update.UpdateChecker.CheckResult.UpdateAvailable -> {
+                        // 버튼 라벨만 바뀌면 새 버전이 있다는 걸 알아채기 어렵다 —
+                        // 아래 배너를 바로 펼쳐서 무엇이 바뀌는지 그 자리에서 보이게 한다.
+                        onUpdateFound()
                         "새 버전 ${result.update.versionName}"
+                    }
                     com.mttd.data.update.UpdateChecker.CheckResult.UpToDate -> "현재 최신 버전"
                     is com.mttd.data.update.UpdateChecker.CheckResult.Failed -> result.message
                 }

@@ -204,6 +204,11 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
      *
      * 서비스가 죽는 경우: 최근 앱에서 밀기(`stopWithTask=true`), 앱 업데이트, 설정의
      * "앱 종료", 시스템 메모리 회수.
+     *
+     * **알려진 동작**: 위치(`inMap`) 도 같이 초기화된다. 맵 안에 서 있는 채로 서비스가
+     * 새로 뜨면 "대기중" 으로 보이고, `inMap` 을 되살리는 경로가 맵 열기(`Spv3Open`) 뿐이라
+     * 다음 맵을 열 때까지 MAP_ONLY 시간이 안 흐른다. 위치를 따로 저장하면 이을 수 있지만,
+     * 맵 하나 분량이라 그대로 두기로 했다 (2026-08-14 결정).
      */
     private fun clearStoredRuns() {
         lifecycleScope.launch {

@@ -1062,7 +1062,9 @@ private fun MapPresenceCard() {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("맵 전환 기록", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "맵 안/밖 판정이 바뀐 순간과 그 원인입니다. 최신이 위입니다.",
+                    "맵 안/밖 판정이 바뀐 순간과 그 원인입니다. 최신이 위입니다.\n" +
+                        "시각은 게임 로그에 찍힌 시각입니다 — 폴러는 최대 5초에 한 번 읽으므로 " +
+                        "앱이 그 줄을 본 시각과는 다릅니다.",
                     fontSize = 12.sp,
                     lineHeight = 19.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1076,7 +1078,9 @@ private fun MapPresenceCard() {
                 for (e in events.asReversed()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            fmt.format(java.util.Date(e.atMs)),
+                            // 게임 로그 시각이 있으면 그걸 쓴다. 없으면 앱이 처리한 시각으로 대체하고
+                            // 물음표를 붙여 어느 쪽인지 알 수 있게 한다.
+                            e.logTime ?: (fmt.format(java.util.Date(e.atMs)) + "?"),
                             fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

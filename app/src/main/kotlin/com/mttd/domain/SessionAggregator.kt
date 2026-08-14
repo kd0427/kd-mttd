@@ -38,8 +38,19 @@ class SessionAggregator(
     )
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    /** 맵 안/밖 판정이 바뀐 이력. 진단 화면에서만 쓴다. */
-    data class MapPresenceEvent(val atMs: Long, val inMap: Boolean, val reason: String)
+    /**
+     * 맵 안/밖 판정이 바뀐 이력. 진단 화면에서만 쓴다.
+     *
+     * @param logTime 그 판정을 유발한 **게임 로그 줄의 시각** (`HH:mm:ss`). 앱이 그 줄을 읽은
+     *   시각([atMs])과는 다르다 — 폴러는 최대 5초에 한 번 읽으므로, 게임에서 1초 만에 끝난
+     *   전환이 앱 시각으로는 8~10초 벌어져 보인다. 진단에는 게임 시각이 맞다.
+     */
+    data class MapPresenceEvent(
+        val atMs: Long,
+        val inMap: Boolean,
+        val reason: String,
+        val logTime: String? = null,
+    )
 
     private val _mapPresenceLog = MutableStateFlow<List<MapPresenceEvent>>(emptyList())
     val mapPresenceLog: StateFlow<List<MapPresenceEvent>> = _mapPresenceLog.asStateFlow()
@@ -374,6 +385,7 @@ class SessionAggregator(
      * - EnterAreaBegin: mapsEntered 카운트 + LevelId 표시
      */
     fun consume(msg: MessageAssembler.RawMessage) {
+        currentLogTime = logClockOf(msg.header.timestampRaw)
         when (msg.header.kind) {
             // ItemChange 는 이제 observeLine 의 Modfy 감지로 처리 → 여기서 중복 처리 안 함
             HeaderKind.ItemChange -> Unit
@@ -400,6 +412,7 @@ class SessionAggregator(
         // 경매장 블록(RECV) 안에서는 `|  +12 [3.0]` 같은 연속 줄에 키워드가 없으므로
         // 필터를 건너뛰어야 한다.
         if (xchgMode == XchgMode.NONE && !isInteresting(line)) return
+        currentLogTime = logClockOf(line)
 
         // 경매장 조회 블록 안이면 그쪽에서 소비. (블록은 짧고 다른 이벤트가 끼지 않는다)
         if (consumeXchgLine(line)) return
@@ -714,9 +727,17 @@ class SessionAggregator(
     /** 새 맵 시작 — 진행 중이던 회차를 닫아 기록으로 넘기고, "이번 맵" 을 비운다. */
     private fun startNewRun() {
         awaitingMapArea = true
+        // 맵 열기는 전환이 없어도 반드시 남긴다. setMapPresence 는 inMap 이 실제로 바뀔 때만
+        // 기록하는데, 맵 밖에서 맵을 열면 이미 false 라 아무 흔적이 안 남는다 — 그러면 진단
+        // 화면만 보고 "Spv3Open 이 안 왔다" 고 잘못 읽게 된다.
+        val wasInMap = _state.value.inMap
         setMapPresence(false, "맵 열기(Spv3Open)")
+        if (!wasInMap) recordPresence(false, "맵 열기(Spv3Open)")
         _state.update {
             it.copy(
+                // 맵핑 횟수는 "맵을 몇 번 열었나" 이므로 여기서 센다. 예전엔 EnterArea 에서
+                // 셌는데, 맵 안에서 다른 맵으로 이동하는 이벤트마다 같이 올라갔다.
+                mapsEntered = it.mapsEntered + 1,
                 currentMapElapsedAccumulatedMs = 0,
                 currentMapElapsedSinceMs = null,
             )
@@ -757,7 +778,8 @@ class SessionAggregator(
      */
     private fun recordPresence(inMap: Boolean, reason: String) {
         _mapPresenceLog.value =
-            (_mapPresenceLog.value + MapPresenceEvent(System.currentTimeMillis(), inMap, reason))
+            (_mapPresenceLog.value +
+                MapPresenceEvent(System.currentTimeMillis(), inMap, reason, currentLogTime))
                 .takeLast(MAX_PRESENCE_LOG)
     }
 
@@ -1068,7 +1090,7 @@ class SessionAggregator(
             }
             val clockRuns = stillInMap && s.baselineReady && !s.paused
             s.copy(
-                mapsEntered = s.mapsEntered + 1,
+                // mapsEntered 는 여기서 세지 않는다 — 맵 열기(startNewRun)가 센다.
                 mapsCompleted = completed,
                 currentAreaId = newArea,
                 currentMapId = levelId,
@@ -1090,6 +1112,20 @@ class SessionAggregator(
 
     /** [handleEnterArea] 의 update 블록에서 블록 밖으로 전환 사유를 넘기는 임시 자리. */
     private var enterAreaPresenceReason: String? = null
+
+    /**
+     * 지금 처리 중인 로그 줄의 게임 시각. 진단 기록이 앱 처리 시각 대신 이걸 쓴다.
+     *
+     * 파싱은 [isInteresting] 필터를 통과한 줄에만 한다 — 전체의 1.25% 뿐이라, 모든 줄에
+     * 정규식을 돌려 그 필터의 목적을 무너뜨리지 않는다.
+     */
+    private var currentLogTime: String? = null
+
+    /** `[2026.08.14-09.35.01:367]…` 과 `2026.08.14-09.35.01:367` 양쪽에서 시:분:초를 뽑는다. */
+    private val logClockRegex = Regex("""(\d{2})\.(\d{2})\.(\d{2}):\d+""")
+
+    private fun logClockOf(raw: String): String? =
+        logClockRegex.find(raw)?.let { "${it.groupValues[1]}:${it.groupValues[2]}:${it.groupValues[3]}" }
 
     private fun pageIdLabel(pageId: String?): String? = when (pageId) {
         "100" -> "장비 백팩"

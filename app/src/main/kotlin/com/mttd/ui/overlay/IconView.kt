@@ -57,7 +57,11 @@ enum class MiniPanelMetric(val id: String, val settingsLabel: String) {
     ;
 
     companion object {
-        val DEFAULT_IDS: Set<String> = entries.mapTo(linkedSetOf()) { it.id }
+        /**
+         * 처음 설치했을 때 켜져 있는 항목. 수익을 읽는 데 필요한 최소 셋만 둔다 —
+         * 여섯 개를 다 켜면 칸이 좁아 라벨이 잘리고, 나머지는 설정에서 켜면 된다.
+         */
+        val DEFAULT_IDS: Set<String> = linkedSetOf(TOTAL_VALUE.id, TOTAL_TIME.id, INCOME_PER_HOUR.id)
     }
 }
 
@@ -75,8 +79,11 @@ enum class MiniPanelControl(val id: String, val settingsLabel: String, val width
     ;
 
     companion object {
-        /** 지금까지의 미니패널 그대로 — 종료는 새로 생긴 선택지라 기본은 꺼짐이다. */
-        val DEFAULT_IDS: Set<String> = linkedSetOf(PAUSE.id, RESET.id, ITEMS.id)
+        /**
+         * 처음 설치했을 때는 버튼이 하나도 없다. 미니패널은 수치를 읽는 자리고, 제어는
+         * 탭해서 여는 상세 패널에 다 있다. 필요한 버튼만 설정에서 켜면 된다.
+         */
+        val DEFAULT_IDS: Set<String> = emptySet()
     }
 }
 

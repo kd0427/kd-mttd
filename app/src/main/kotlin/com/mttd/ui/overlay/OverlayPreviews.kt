@@ -106,13 +106,20 @@ private fun OnGame(content: @Composable () -> Unit) {
 
 // ── 미니패널 (요약 바) ────────────────────────────────────────────────
 
+// DEFAULT_IDS 는 처음 설치했을 때의 세 항목이라, "다 켠 상태" 는 여기서 직접 만든다.
 @Preview(name = "미니패널 · 항목 6개", widthDp = 412, showBackground = true)
 @Composable
 private fun PreviewMiniPanelAll() = OnGame {
     IconOverlay(
         sessionState = MutableStateFlow(sampleSession()),
-        metricFlow = flowOf(MiniPanelMetric.DEFAULT_IDS),
+        metricFlow = flowOf(MiniPanelMetric.entries.mapTo(linkedSetOf()) { it.id }),
     )
+}
+
+@Preview(name = "미니패널 · 기본값 (항목 3개, 버튼 없음)", widthDp = 412, showBackground = true)
+@Composable
+private fun PreviewMiniPanelDefault() = OnGame {
+    IconOverlay(sessionState = MutableStateFlow(sampleSession()))
 }
 
 @Preview(name = "미니패널 · 항목 3개", widthDp = 412, showBackground = true)
@@ -146,6 +153,8 @@ private fun PreviewMiniPanelPaused() = OnGame {
     IconOverlay(
         sessionState = MutableStateFlow(sampleSession(paused = true)),
         metricFlow = flowOf(MiniPanelMetric.DEFAULT_IDS),
+        // 일시정지 버튼이 재생 모양으로 바뀌는 것도 같이 보려고 이 프리뷰만 버튼을 켠다.
+        controlFlow = flowOf(setOf(MiniPanelControl.PAUSE.id)),
     )
 }
 
@@ -158,25 +167,15 @@ private fun PreviewMiniPanelWaiting() = OnGame {
     )
 }
 
-// 버튼 개수는 수치 칸 폭을 직접 바꾼다. 가장 넓을 때(4개)와 없을 때를 같이 둬서
-// 템 버튼이 잘리지 않는지, 버튼을 다 끄면 수치가 제대로 늘어나는지 눈으로 본다.
+// 버튼 개수는 수치 칸 폭을 직접 바꾼다. 버튼이 가장 많을 때 템 버튼이 잘리지 않는지 본다
+// (버튼이 하나도 없는 쪽은 위의 "기본값" 프리뷰가 그대로 보여준다).
 @Preview(name = "미니패널 · 버튼 4개", widthDp = 412, showBackground = true)
 @Composable
 private fun PreviewMiniPanelAllControls() = OnGame {
     IconOverlay(
         sessionState = MutableStateFlow(sampleSession()),
-        metricFlow = flowOf(MiniPanelMetric.DEFAULT_IDS),
+        metricFlow = flowOf(MiniPanelMetric.entries.mapTo(linkedSetOf()) { it.id }),
         controlFlow = flowOf(MiniPanelControl.entries.mapTo(linkedSetOf()) { it.id }),
-    )
-}
-
-@Preview(name = "미니패널 · 버튼 없음", widthDp = 412, showBackground = true)
-@Composable
-private fun PreviewMiniPanelNoControls() = OnGame {
-    IconOverlay(
-        sessionState = MutableStateFlow(sampleSession()),
-        metricFlow = flowOf(MiniPanelMetric.DEFAULT_IDS),
-        controlFlow = flowOf(emptySet()),
     )
 }
 

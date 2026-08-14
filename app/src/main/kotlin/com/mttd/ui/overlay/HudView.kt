@@ -24,7 +24,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -159,6 +158,10 @@ fun HudOverlay(
         ) {
             // 제목/빈 헤더 영역을 누르면 다시 요약 바로 접힌다. 헤더 안의 제어 버튼은
             // 각자 클릭 처리를 유지한다.
+            //
+            // 접기 전용 ✕ 버튼은 뺐다 — 바로 옆 종료(🚪)와 나란히 있으면 둘 다 "닫기" 로
+            // 읽히는데 결과가 정반대다(하나는 패널만 접고, 하나는 세션을 버린다).
+            // 접는 길은 이 헤더 탭과 미니패널 탭으로 이미 두 개 있다.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -201,8 +204,7 @@ fun HudOverlay(
                 // 리셋과 같은 1 초 길게 누르기로 둔다. 실수로 스치면 안 된다.
                 HudLongPressIconButton(Icons.AutoMirrored.Filled.Logout, onExitApp)
 
-                Spacer(Modifier.width(3.dp))
-                HudMaterialIconButton(Icons.Filled.Close, onCollapse)
+
             }
 
             if (session.inExchange) {

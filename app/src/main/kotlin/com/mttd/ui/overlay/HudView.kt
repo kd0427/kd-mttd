@@ -178,10 +178,14 @@ fun HudOverlay(
                 }
                 Text(statusText, color = statusColor, fontSize = 10.sp)
                 Spacer(Modifier.fillMaxWidth().weight(1f))
-                // 버튼 사이 간격은 12dp — 24dp 버튼 사이에 그만큼의 무반응 구간을 둬서
+                // 버튼 사이 간격은 20dp — 24dp 버튼 사이에 그만큼의 무반응 구간을 둬서
                 // 옆 버튼 오터치를 막는다. 제목을 뺀 자리가 이 여백으로 갔다.
+                //
+                // 상한은 34dp 근처다. 패널 280dp - 좌우 여백 20dp = 260dp 에서 버튼 4 개(96dp)
+                // 와 가장 긴 상태 문구("● 로그·가방", 10sp 로 약 62dp)를 빼면 간격 셋에 쓸 수
+                // 있는 폭이 102dp 다. 더 벌리려면 상태 문구가 눌리지 않는지 기기에서 볼 것.
                 HudMaterialIconButton(Icons.Filled.Settings, onOpenSettings)
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(20.dp))
                 if (session.inExchange) {
                     // 거래소 안에서는 pause 가 자동 제어라 수동 토글 버튼이 필요 없고,
                     // 새로고침은 리셋이 아니라 보유 아이템 가치 재계산이어야 한다.
@@ -191,10 +195,10 @@ fun HudOverlay(
                         if (session.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                         onTogglePause,
                     )
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(20.dp))
                     HudDangerIconButton(Icons.Filled.Refresh, "초기화", onReset)
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(20.dp))
                 HudDangerIconButton(Icons.AutoMirrored.Filled.Logout, "mTTD 종료", onExitApp)
 
 

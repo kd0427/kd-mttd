@@ -88,6 +88,7 @@ import com.mttd.data.shizuku.ShizukuState
 import com.mttd.domain.models.SessionState
 import com.mttd.service.TrackerForegroundService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -1091,8 +1092,45 @@ private fun LogTailCard(userService: () -> IUserService?) {
             )
             status.lastError?.let { LabelValue("최근 오류", it) }
 
+            // "N초 전" 이 흐르려면 주기적 재구성이 필요하다. 폴러 상태는 값이 안 바뀌면
+            // StateFlow 가 새로 흘리지 않아서(deep idle 이면 30초에 한 번도 안 바뀐다)
+            // 표시가 그대로 멈춰 버린다. 이 카드가 열려 있는 동안만 1 초 틱을 돈다.
+            var tick by remember { mutableStateOf(0) }
+            LaunchedEffect(Unit) {
+                while (true) { delay(1000); tick++ }
+            }
+            val lastGrowth = status.lastGrowthAtMs
+            LabelValue(
+                "마지막 로그 수신",
+                remember(status, tick) {
+                    when {
+                        !status.active -> "폴링 중지됨"
+                        lastGrowth == 0L -> "아직 한 줄도 못 받음"
+                        else -> formatUpdatedAgo(lastGrowth)
+                    }
+                },
+            )
+            LabelValue(
+                "게임 상태(추정)",
+                remember(status, tick) {
+                    when {
+                        !status.active -> "판단 불가"
+                        lastGrowth == 0L -> "로그 안 옴"
+                        status.gameLikelyRunning() -> "실행 중"
+                        else -> "종료 또는 백그라운드"
+                    }
+                },
+            )
+
             HorizontalDivider()
             Text("최근 라인 (10개)", fontWeight = FontWeight.SemiBold)
+            // 이 목록은 새 로그가 올 때마다 저절로 바뀐다(StateFlow 구독). 당겨올 게 없어서
+            // 새로고침 버튼은 의미가 없다 — 안 바뀌면 새 줄이 안 오는 것이고, 그 이유는
+            // 바로 위 두 줄로 판단한다.
+            BulletLine(
+                "게임을 백그라운드로 보내면 로그가 멈춥니다. " +
+                    "이 화면을 보는 동안 안 바뀌는 것은 정상일 수 있습니다.",
+            )
             val recentLines by (svc?.recentLines ?: MutableStateFlow(emptyList<String>()))
                 .collectAsStateWithLifecycle()
             RecentLines(recentLines)

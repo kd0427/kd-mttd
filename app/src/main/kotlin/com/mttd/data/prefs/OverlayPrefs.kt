@@ -48,6 +48,25 @@ class OverlayPrefs(private val context: Context) {
     }
 
     /**
+     * 미니패널에 표시할 제어 버튼. 수치와 달리 **하나도 안 고를 수 있다** — 버튼을 다 끄면
+     * 수치만 남는 패널이 되고, 제어는 탭해서 여는 상세 패널에서 하면 된다.
+     *
+     * 그래서 "저장한 적 없음"(→ 기본값)과 "일부러 다 껐음"(→ 빈 집합)을 구분해야 하는데,
+     * DataStore 의 빈 Set 은 그 구분이 애매하다. 빈 선택은 [NONE_ID] 한 개를 대신 저장한다.
+     */
+    val miniPanelControls: Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        val stored = preferences[KEY_MINI_PANEL_CONTROLS]
+            ?: return@map com.mttd.ui.overlay.MiniPanelControl.DEFAULT_IDS
+        if (NONE_ID in stored) emptySet() else stored
+    }
+
+    suspend fun setMiniPanelControls(ids: Set<String>) {
+        context.dataStore.edit {
+            it[KEY_MINI_PANEL_CONTROLS] = ids.ifEmpty { setOf(NONE_ID) }
+        }
+    }
+
+    /**
      * 미니패널의 수익을 세후(경매장 세금 1/8 차감)로 보여줄지. 기본은 세전(시장가) —
      * 지금까지의 동작이고, 상세 패널(HUD)이 세전·세후를 나란히 보여주는 기준도 세전이다.
      */
@@ -142,7 +161,10 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_PRICE_SOURCE = androidx.datastore.preferences.core.stringPreferencesKey("price_source")
         private val KEY_BADGE_METRIC = androidx.datastore.preferences.core.stringPreferencesKey("badge_income_metric")
         private val KEY_MINI_PANEL_METRICS = stringSetPreferencesKey("mini_panel_metrics")
+        private val KEY_MINI_PANEL_CONTROLS = stringSetPreferencesKey("mini_panel_controls")
         private val KEY_MINI_PANEL_NET_VALUE = booleanPreferencesKey("mini_panel_net_value")
+        /** "버튼을 하나도 안 골랐다" 를 나타내는 자리표시자. 어떤 버튼 id 와도 겹치지 않는다. */
+        private const val NONE_ID = "__none__"
         private val KEY_TIME_TRACKING_MODE = androidx.datastore.preferences.core.stringPreferencesKey("time_tracking_mode")
         const val POSITION_UNSET = Int.MIN_VALUE
     }

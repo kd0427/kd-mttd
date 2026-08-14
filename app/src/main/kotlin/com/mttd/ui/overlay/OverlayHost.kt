@@ -116,6 +116,7 @@ class OverlayHost(
             IconOverlay(
                 sessionState = sessionState,
                 metricFlow = prefs.miniPanelMetrics,
+                controlFlow = prefs.miniPanelControls,
                 netValueFlow = prefs.miniPanelNetValue,
                 maxPanelWidthPx = (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260)),
                 onTogglePause = {
@@ -125,6 +126,9 @@ class OverlayHost(
                     com.mttd.TrackerApplication.instance.trackerService.value?.resetSession()
                 },
                 onToggleItems = { toggleItemPanel() },
+                onExitApp = {
+                    com.mttd.TrackerApplication.instance.trackerService.value?.exitApp()
+                },
             )
         }
         attachDragBehavior(

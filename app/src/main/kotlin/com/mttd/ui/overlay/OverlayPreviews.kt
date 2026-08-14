@@ -158,6 +158,28 @@ private fun PreviewMiniPanelWaiting() = OnGame {
     )
 }
 
+// 버튼 개수는 수치 칸 폭을 직접 바꾼다. 가장 넓을 때(4개)와 없을 때를 같이 둬서
+// 템 버튼이 잘리지 않는지, 버튼을 다 끄면 수치가 제대로 늘어나는지 눈으로 본다.
+@Preview(name = "미니패널 · 버튼 4개", widthDp = 412, showBackground = true)
+@Composable
+private fun PreviewMiniPanelAllControls() = OnGame {
+    IconOverlay(
+        sessionState = MutableStateFlow(sampleSession()),
+        metricFlow = flowOf(MiniPanelMetric.DEFAULT_IDS),
+        controlFlow = flowOf(MiniPanelControl.entries.mapTo(linkedSetOf()) { it.id }),
+    )
+}
+
+@Preview(name = "미니패널 · 버튼 없음", widthDp = 412, showBackground = true)
+@Composable
+private fun PreviewMiniPanelNoControls() = OnGame {
+    IconOverlay(
+        sessionState = MutableStateFlow(sampleSession()),
+        metricFlow = flowOf(MiniPanelMetric.DEFAULT_IDS),
+        controlFlow = flowOf(emptySet()),
+    )
+}
+
 // ── 상세 패널 ─────────────────────────────────────────────────────────
 
 @Preview(name = "상세 패널", widthDp = 320, showBackground = true)

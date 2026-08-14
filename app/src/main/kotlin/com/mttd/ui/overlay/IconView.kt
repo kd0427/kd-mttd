@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -35,6 +36,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -56,6 +58,25 @@ enum class MiniPanelMetric(val id: String, val settingsLabel: String) {
 
     companion object {
         val DEFAULT_IDS: Set<String> = entries.mapTo(linkedSetOf()) { it.id }
+    }
+}
+
+/**
+ * 미니패널 오른쪽에 표시할 제어 버튼. 설정에서 하나씩 켜고 끌 수 있다.
+ *
+ * [width] 는 패널 폭 계산([IconOverlay] 의 `fixedWidth`)에 쓰인다 — 버튼을 끄면 그만큼이
+ * 수치 칸으로 돌아간다. 값은 각 버튼 컴포저블의 `size` 와 반드시 같아야 한다.
+ */
+enum class MiniPanelControl(val id: String, val settingsLabel: String, val width: Dp) {
+    PAUSE("pause", "일시정지", 24.dp),
+    RESET("reset", "초기화", 24.dp),
+    ITEMS("items", "템 목록", 30.dp),
+    EXIT("exit", "종료", 24.dp),
+    ;
+
+    companion object {
+        /** 지금까지의 미니패널 그대로 — 종료는 새로 생긴 선택지라 기본은 꺼짐이다. */
+        val DEFAULT_IDS: Set<String> = linkedSetOf(PAUSE.id, RESET.id, ITEMS.id)
     }
 }
 
@@ -90,16 +111,21 @@ enum class BadgeIncomeMetric(val id: String, val label: String, val perHour: Boo
 fun IconOverlay(
     sessionState: StateFlow<SessionState>,
     metricFlow: Flow<Set<String>> = flowOf(MiniPanelMetric.DEFAULT_IDS),
+    controlFlow: Flow<Set<String>> = flowOf(MiniPanelControl.DEFAULT_IDS),
     /** true 면 수익을 경매장 세금(1/8) 뺀 실수령으로 보여준다. */
     netValueFlow: Flow<Boolean> = flowOf(false),
     maxPanelWidthPx: Int? = null,
     onTogglePause: () -> Unit = {},
     onReset: () -> Unit = {},
     onToggleItems: () -> Unit = {},
+    onExitApp: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
     val selectedMetricIds by metricFlow.collectAsStateWithLifecycle(
         initialValue = MiniPanelMetric.DEFAULT_IDS,
+    )
+    val selectedControlIds by controlFlow.collectAsStateWithLifecycle(
+        initialValue = MiniPanelControl.DEFAULT_IDS,
     )
     val showNet by netValueFlow.collectAsStateWithLifecycle(initialValue = false)
 
@@ -144,10 +170,20 @@ fun IconOverlay(
         // 실제 px를 여기서 dp로 환산해야 카드와 정확히 같은 최대 폭이 된다.
         with(density) { pixels.toDp() }
     } ?: (LocalConfiguration.current.screenWidthDp.dp - 40.dp).coerceAtLeast(260.dp)
+    val selectedControls = remember(selectedControlIds) {
+        MiniPanelControl.entries.filter { it.id in selectedControlIds }
+    }
     val gap = 5.dp
     val statusToMetricGap = 1.dp
     val controlGap = 9.dp
-    val fixedWidth = 48.dp + statusToMetricGap + 24.dp + controlGap + 24.dp + controlGap + 30.dp +
+    // 버튼을 끄면 그 폭이 그대로 수치 칸으로 돌아가야 하므로 고정 폭을 켜진 버튼으로 계산한다.
+    // 마지막 수치와 첫 버튼 사이의 gap 도 여기 포함된다 — 예전 식은 이걸 빠뜨려서 5dp 를
+    // 덜 잡고 있었다. 버튼이 하나도 없으면 그 gap 자체가 없다.
+    val controlsWidth = if (selectedControls.isEmpty()) 0.dp else {
+        gap + selectedControls.fold(0.dp) { acc, c -> acc + c.width } +
+            controlGap * (selectedControls.size - 1)
+    }
+    val fixedWidth = 48.dp + statusToMetricGap + controlsWidth +
         gap * (selectedMetrics.size - 1)
     val metricWidth = ((maxPanelWidth - fixedWidth).value / selectedMetrics.size)
         .coerceAtLeast(1f)
@@ -207,15 +243,19 @@ fun IconOverlay(
                 }
                 if (index < selectedMetrics.lastIndex) Spacer(Modifier.width(gap))
             }
-            Spacer(Modifier.width(gap))
-            SummaryPauseButton(
-                paused = session.paused,
-                onClick = onTogglePause,
-            )
-            Spacer(Modifier.width(controlGap))
-            SummaryResetButton(onReset)
-            Spacer(Modifier.width(controlGap))
-            SummaryItemButton(onToggleItems)
+            if (selectedControls.isNotEmpty()) Spacer(Modifier.width(gap))
+            selectedControls.forEachIndexed { index, control ->
+                when (control) {
+                    MiniPanelControl.PAUSE -> SummaryPauseButton(
+                        paused = session.paused,
+                        onClick = onTogglePause,
+                    )
+                    MiniPanelControl.RESET -> SummaryResetButton(onReset)
+                    MiniPanelControl.ITEMS -> SummaryItemButton(onToggleItems)
+                    MiniPanelControl.EXIT -> SummaryExitButton(onExitApp)
+                }
+                if (index < selectedControls.lastIndex) Spacer(Modifier.width(controlGap))
+            }
         }
     }
 }
@@ -266,9 +306,9 @@ private fun SummaryMetric(label: String, value: String, color: Color, width: and
 }
 
 /**
- * 초기화는 여기서만 더블탭이다. 일반패널은 버튼 사이를 12dp 로 벌려서 한 번 탭으로 내렸지만,
- * 미니패널은 그럴 폭이 없어 버튼끼리 붙어 있다 — 제스처가 유일한 오터치 방어선이다.
- * 두 패널을 통일하려다 이걸 한 번 탭으로 바꾸면 세션이 스치기만 해도 날아간다.
+ * 초기화·종료는 여기서만 더블탭이다. 일반패널은 버튼 사이를 20dp 로 벌려서 한 번 탭으로
+ * 내렸지만, 미니패널은 그럴 폭이 없어 버튼끼리 9dp 로 붙어 있다 — 제스처가 유일한 오터치
+ * 방어선이다. 두 패널을 통일하려다 이걸 한 번 탭으로 바꾸면 세션이 스치기만 해도 날아간다.
  */
 @Composable
 private fun SummaryResetButton(onReset: () -> Unit) {
@@ -305,6 +345,32 @@ private fun SummaryPauseButton(paused: Boolean, onClick: () -> Unit) {
             imageVector = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
             contentDescription = if (paused) "재생" else "일시정지",
             tint = if (paused) Color(0xFF4ADE80) else Color(0xFFFBBF24),
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+/**
+ * mTTD 를 통째로 끈다. 초기화와 같은 위험도라 배경·색·제스처를 똑같이 맞췄다 — 다른 톤을
+ * 주면 둘 중 하나가 덜 위험해 보인다. 구분은 아이콘이 한다.
+ */
+@Composable
+private fun SummaryExitButton(onExitApp: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .background(Color(0xFF3F1D2E), RoundedCornerShape(7.dp))
+            .pointerInput(onExitApp) {
+                detectTapGestures(
+                    onDoubleTap = { onExitApp() },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Logout,
+            contentDescription = "두 번 눌러 mTTD 종료",
+            tint = Color(0xFFF87171),
             modifier = Modifier.size(16.dp),
         )
     }

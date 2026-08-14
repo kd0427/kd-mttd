@@ -1252,6 +1252,9 @@ private fun OverlayCard() {
         initialValue = com.mttd.ui.overlay.MiniPanelMetric.DEFAULT_IDS,
     )
     var showMinimumMetricDialog by remember { mutableStateOf(false) }
+    val miniPanelControls by prefs.miniPanelControls.collectAsStateWithLifecycle(
+        initialValue = com.mttd.ui.overlay.MiniPanelControl.DEFAULT_IDS,
+    )
     val panelEnabled by prefs.gamePanelEnabled.collectAsStateWithLifecycle(initialValue = true)
     val miniPanelNetValue by prefs.miniPanelNetValue.collectAsStateWithLifecycle(initialValue = false)
 
@@ -1370,7 +1373,9 @@ private fun OverlayCard() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    "최소 1개의 항목은 선택해야 합니다.",
+                    // 아래 "미니패널 버튼" 은 전부 꺼도 되므로, 최소 1개 규칙이 수치 항목에만
+                    // 걸린다는 걸 문구에서 분명히 한다.
+                    "수치 항목은 최소 1개를 선택해야 합니다.",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.secondary,
@@ -1398,6 +1403,39 @@ private fun OverlayCard() {
                     )
                 }
             }
+
+            HorizontalDivider(color = MttdColors.DividerSoft)
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("미니패널 버튼", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "미니패널 오른쪽에 둘 버튼을 선택하세요. 끈 버튼의 자리는 수치 칸이 나눠 씁니다.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = 2,
+            ) {
+                for (control in com.mttd.ui.overlay.MiniPanelControl.entries) {
+                    val selected = control.id in miniPanelControls
+                    MetricChip(
+                        label = control.settingsLabel,
+                        selected = selected,
+                        modifier = Modifier.weight(1f),
+                        onToggle = {
+                            val updated = if (!selected) miniPanelControls + control.id
+                                          else miniPanelControls - control.id
+                            scope.launch { prefs.setMiniPanelControls(updated) }
+                        },
+                    )
+                }
+            }
+            BulletLine("초기화와 종료는 미니패널에서 두 번 눌러야 실행됩니다. 버튼이 붙어 있어 실수로 눌리는 걸 막기 위한 것입니다.")
+            BulletLine("버튼을 모두 꺼도 됩니다. 미니패널을 탭해 상세 패널을 열면 같은 버튼이 모두 있습니다.")
 
             HorizontalDivider(color = MttdColors.DividerSoft)
 

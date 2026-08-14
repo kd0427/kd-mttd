@@ -19,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -39,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.mttd.data.shizuku.ShizukuState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -170,12 +172,18 @@ fun SetupWizardScreen(
 
 @Composable
 private fun WizardCard(title: String, body: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    // 기본 Card 는 채워진 회색이라, 흰 면 + 얇은 테두리를 쓰는 나머지 화면과 톤이 어긋난다.
+    // 여기만 고치면 5개 단계 카드가 전부 따라온다.
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             body()
         }
     }

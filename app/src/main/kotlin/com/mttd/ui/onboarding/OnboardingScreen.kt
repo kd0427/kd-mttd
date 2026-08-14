@@ -14,18 +14,24 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Pause
@@ -36,7 +42,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.RadioButton
@@ -72,8 +77,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mttd.IUserService
+import com.mttd.ui.theme.MttdColors
 import com.mttd.TrackerApplication
 import com.mttd.data.log.LogPoller
 import com.mttd.data.shizuku.ShizukuState
@@ -107,7 +114,9 @@ fun OnboardingScreen(
     var tab by remember { mutableStateOf(MainTab.EARNINGS) }
     val context = LocalContext.current
 
-    Scaffold { padding ->
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { padding ->
         // 일부 기기(멀티윈도우/프리폼 모드 등)가 인셋을 음수로 내려주는 경우가 있어
         // Modifier.padding() 이 "Padding must be non-negative" 로 즉시 크래시한다 — 방어적으로 clamp.
         val layoutDirection = LocalLayoutDirection.current
@@ -120,59 +129,64 @@ fun OnboardingScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
                 .padding(safePadding),
         ) {
-            Box(
+            // 상단 브랜딩 영역은 흰 면, 본문은 옅은 블루그레이 바탕. 시안의 기본 골격이다.
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
             ) {
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    Text(
-                        text = "v${com.mttd.BuildConfig.VERSION_NAME.substringBefore('-')}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Image(
-                        painter = painterResource(com.mttd.R.drawable.ic_mttd_header),
-                        contentDescription = "고인물 mTTD 앱 아이콘",
-                        contentScale = ContentScale.Crop,
+                // 시안은 업데이트 버튼 줄을 먼저 놓고 로고 블록을 30px 끌어올려 겹친다.
+                // Compose 에는 음수 패딩이 없으므로 같은 Box 안에서 로고는 상단 중앙,
+                // 버튼은 상단 우측으로 배치해 같은 결과를 만든다.
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Column(
                         modifier = Modifier
-                            .size(68.dp)
-                            .clip(RoundedCornerShape(18.dp)),
-                    )
-                    Text(
-                        text = "고인물 mTTD",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                            .align(Alignment.TopCenter)
+                            .padding(top = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "v${com.mttd.BuildConfig.VERSION_NAME.substringBefore('-')}",
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Image(
+                            painter = painterResource(com.mttd.R.drawable.ic_mttd_header),
+                            contentDescription = "고인물 mTTD 앱 아이콘",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .shadow(6.dp, RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(16.dp)),
+                        )
+                        Text(
+                            text = "고인물 mTTD",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    Box(modifier = Modifier.align(Alignment.TopEnd)) {
+                        UpdateCheckButton()
+                    }
                 }
-                Box(modifier = Modifier.align(Alignment.TopEnd)) {
-                    UpdateCheckButton()
-                }
-            }
 
-            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                 UpdateBanner()
-            }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 4.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(16.dp))
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
-                        shape = RoundedCornerShape(16.dp),
-                    )
-                    .padding(4.dp),
-            ) {
-                Row(modifier = Modifier.fillMaxWidth()) {
+                // 탭 트랙. 시안은 테두리 없이 인셋 배경만 쓴다.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(14.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     MainTab.entries.forEach { item ->
                         MainSegment(
                             label = item.label,
@@ -183,6 +197,7 @@ fun OnboardingScreen(
                     }
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
             // 탭마다 독립된 스크롤 위치를 갖도록 tab 이 바뀌면 새 ScrollState 로 교체 —
             // 하나의 ScrollState 를 공유하면 한 탭에서 내려놓은 스크롤 위치가 다른 탭에도
@@ -192,8 +207,8 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 20.dp, vertical = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 when (tab) {
                     MainTab.EARNINGS -> {
@@ -233,7 +248,7 @@ fun OnboardingScreen(
     }
 }
 
-/** iOS 설정 앱처럼 현재 탭만 흰색 캡슐로 띄우는 상단 세그먼트. */
+/** 시안의 상단 탭. 선택된 탭만 블루 캡슐로 띄우고 그림자로 살짝 들어 올린다. */
 @Composable
 private fun MainSegment(
     label: String,
@@ -243,20 +258,21 @@ private fun MainSegment(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .height(40.dp)
+            .then(if (selected) Modifier.shadow(4.dp, RoundedCornerShape(11.dp)) else Modifier)
+            .clip(RoundedCornerShape(11.dp))
             .background(
-                if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
-                RoundedCornerShape(12.dp),
+                if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                RoundedCornerShape(11.dp),
             )
-            .clickable(onClick = onClick)
-            .padding(vertical = 9.dp),
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge,
+            fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -298,7 +314,7 @@ private fun UpdateBanner() {
         ),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(
@@ -412,47 +428,48 @@ private fun NotReadyNotice(onGoToSettings: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = androidx.compose.ui.graphics.SolidColor(
-                MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f),
-            ),
-        ),
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MttdColors.WarnLine),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(14.dp)),
+                    .size(38.dp)
+                    .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(11.dp)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = Icons.Filled.WarningAmber,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(19.dp),
                 )
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Shizuku 연결 필요", fontWeight = FontWeight.SemiBold)
+                Text("Shizuku 연결 필요", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Text(
                     "로그를 읽으려면 Shizuku를 준비해 주세요.",
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            FilledTonalButton(
+            // 시안은 경고 카드 안에서도 액션은 브랜드 블루로 둔다 — 오렌지는 상태 표시 전용.
+            Button(
                 onClick = onGoToSettings,
-                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                ),
-            ) { Text("설정") }
+                modifier = Modifier.height(34.dp),
+                shape = RoundedCornerShape(9.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp),
+            ) {
+                Text("설정", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            }
         }
     }
 }
@@ -479,15 +496,11 @@ private fun EarningsSummaryCard() {
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = androidx.compose.ui.graphics.SolidColor(
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
-            ),
-        ),
+        border = CardDefaults.outlinedCardBorder(),
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // 좁은 화면에서 숫자 + 버튼 2개가 한 줄에 안 들어가면 버튼 묶음이 통째로
             // 다음 줄로 넘어간다. 버튼 묶음을 하나의 FlowRow 항목으로 묶고 SpaceBetween 을
@@ -502,23 +515,29 @@ private fun EarningsSummaryCard() {
                 Column {
                     Text(
                         com.mttd.ui.overlay.formatFire(session.totalValue),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.secondary,
+                        fontSize = 40.sp,
+                        lineHeight = 42.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-1).sp,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                     Text(
                         "총 수익" +
                             if (session.unpricedPickups > 0) "  ·  미가격 ${session.unpricedPickups}건" else "",
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(
+                        modifier = Modifier.height(40.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp),
                         onClick = { service?.togglePause() },
                         enabled = service != null,
                         colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.primary,
                         ),
                     ) {
@@ -531,11 +550,16 @@ private fun EarningsSummaryCard() {
                         Text(if (session.paused) "재개" else "일시정지")
                     }
                     OutlinedButton(
+                        modifier = Modifier.height(40.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp),
                         onClick = { confirmReset = true },
                         enabled = service != null,
                         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
                             contentColor = MaterialTheme.colorScheme.error,
                         ),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MttdColors.DangerLine),
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
@@ -557,7 +581,7 @@ private fun EarningsSummaryCard() {
                             TextButton(onClick = {
                                 confirmReset = false
                                 service?.resetSession()
-                            }) { Text("리셋", color = Color(0xFFF87171)) }
+                            }) { Text("리셋", color = MaterialTheme.colorScheme.error) }
                         },
                         dismissButton = {
                             TextButton(onClick = { confirmReset = false }) { Text("취소") }
@@ -572,66 +596,87 @@ private fun EarningsSummaryCard() {
                     color = MaterialTheme.colorScheme.tertiary,
                 )
             }
-            Spacer(Modifier.height(6.dp))
+            // 시안의 inset 4분할. 구분선은 항목 사이에만 들어가고 칸 높이를 꽉 채운다
+            // (IntrinsicSize.Min 이라야 VerticalDivider 가 가장 높은 칸에 맞춰 늘어난다).
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(14.dp))
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                        shape = RoundedCornerShape(14.dp),
-                    )
-                    .padding(vertical = 10.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .height(IntrinsicSize.Min)
+                    .background(MaterialTheme.colorScheme.background, RoundedCornerShape(12.dp))
+                    .border(1.dp, MttdColors.DividerSoft, RoundedCornerShape(12.dp)),
             ) {
-                MiniStat("시간당", com.mttd.ui.overlay.formatFire(perHour) + " /h", Modifier.weight(1f))
-                VerticalDivider(
-                    modifier = Modifier.height(34.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                )
-                MiniStat("시간", formatElapsed(elapsed), Modifier.weight(1f))
-                VerticalDivider(
-                    modifier = Modifier.height(34.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                )
-                MiniStat("맵", "${session.mapsEntered}회", Modifier.weight(1f))
-                VerticalDivider(
-                    modifier = Modifier.height(34.dp),
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                )
-                MiniStat("획득", "${session.pickupCount}개", Modifier.weight(1f))
+                MiniStat("시간당", com.mttd.ui.overlay.formatFire(perHour), "/h", Modifier.weight(1f))
+                StatDivider()
+                MiniStat("시간", formatElapsed(elapsed), "", Modifier.weight(1f))
+                StatDivider()
+                MiniStat("맵", "${session.mapsEntered}", "회", Modifier.weight(1f))
+                StatDivider()
+                MiniStat("획득", "${session.pickupCount}", "개", Modifier.weight(1f))
             }
             if (!session.baselineReady) {
-                Text(
-                    "🎒 로그 오픈 후 가방 정렬을 해주세요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    maxLines = 1,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🎒", fontSize = 20.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "로그 오픈 후 가방을 정렬해주세요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MiniStat(label: String, value: String, modifier: Modifier = Modifier) {
+private fun MiniStat(
+    label: String,
+    value: String,
+    unit: String,
+    modifier: Modifier = Modifier,
+) {
     Column(
-        modifier = modifier,
+        modifier = modifier.padding(vertical = 10.dp, horizontal = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.labelSmall,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Text(
-            value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace,
-        )
+        // 시안은 값과 단위를 분리해 단위를 작고 흐리게 깐다.
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                value,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = (-0.3).sp,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (unit.isNotEmpty()) {
+                Spacer(Modifier.width(2.dp))
+                Text(
+                    unit,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
+}
+
+/** 4분할 통계 칸 사이의 세로 구분선. 칸 높이를 꽉 채운다. */
+@Composable
+private fun StatDivider() {
+    VerticalDivider(
+        modifier = Modifier.fillMaxHeight(),
+        color = MaterialTheme.colorScheme.outline,
+    )
 }
 
 /**
@@ -653,23 +698,28 @@ private fun RunHistorySection() {
     var selectedId by remember { mutableStateOf<Long?>(null) }
     val selected = session.runs.firstOrNull { it.id == selectedId }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("회차별 수익", fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("회차별 수익", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "막대를 누르면 상세",
-                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
                     "${session.runs.size}회차",
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -702,17 +752,48 @@ private fun PriceSummaryLine() {
     val priceState by (service?.priceState ?: MutableStateFlow(com.mttd.data.prices.PriceRepository.State()))
         .collectAsStateWithLifecycle()
 
-    val text = when {
-        priceState.loading -> "시세 불러오는 중..."
+    val loaded = !priceState.loading && priceState.itemsWithPrice > 1
+    val body = when {
+        priceState.loading -> "불러오는 중..."
         priceState.itemsWithPrice <= 1 -> "시세 없음 — 설정 탭에서 새로고침"
-        else -> "시세: ${priceState.source.label} · ${priceState.seasonId ?: "-"} · " +
-                "가격 ${priceState.itemsWithPrice}개 · ${formatUpdatedAgo(priceState.lastUpdatedMs)}"
+        else -> "${priceState.source.label} · ${priceState.seasonId ?: "-"} · " +
+                "가격 ${priceState.itemsWithPrice}개"
     }
-    Text(
-        text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    // 시안은 갱신 시각을 본문에 붙이지 않고 오른쪽 끝으로 뺀다 — 본문이 길어져도 잘리는 건
+    // 가운데뿐이고 "언제 받은 값인지"는 항상 보인다.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(14.dp))
+            .border(1.dp, MttdColors.BlueBorder, RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "시세",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        Text(
+            body,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = 0.2.sp,
+            color = MttdColors.BlueText,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (loaded) {
+            Text(
+                formatUpdatedAgo(priceState.lastUpdatedMs),
+                fontSize = 11.sp,
+                color = MttdColors.BlueText,
+            )
+        }
+    }
 }
 
 @Composable
@@ -725,10 +806,14 @@ private fun ShizukuStatusCard(
     // 다 준비된 상태에선 매번 4줄 상세를 보여줄 필요가 없어 한 줄 요약으로 접어둔다.
     // 뭔가 문제가 있을 땐(하나라도 false) 바로 뭘 고쳐야 하는지 보여야 하니 항상 펼쳐둔다.
     val collapsible = state.ready
-    Card(modifier = Modifier.fillMaxWidth().padding(0.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (collapsible) {
                 Row(
@@ -748,23 +833,22 @@ private fun ShizukuStatusCard(
                     )
                 }
             } else {
-                Text("Shizuku 상태", fontWeight = FontWeight.SemiBold)
+                Text("Shizuku 상태", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
             if (expanded || !collapsible) {
                 StatusRow("설치됨", state.installed)
                 StatusRow("Shizuku 실행", state.binderAlive)
                 StatusRow("권한 허용", state.permission)
                 StatusRow("로그 연결", state.userServiceBound)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
+                        modifier = Modifier.weight(1f).height(56.dp),
                         onClick = onRequestPermission,
                         enabled = state.installed,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF8A4B08),
-                            contentColor = Color(0xFFFFF3D6),
-                            disabledContainerColor = Color(0xFF3B2A16),
-                            disabledContentColor = Color(0xFFB8A58B),
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
                         ),
                     ) {
                         Text(
@@ -778,6 +862,7 @@ private fun ShizukuStatusCard(
                         )
                     }
                     OutlinedButton(
+                        modifier = Modifier.height(56.dp),
                         onClick = {
                         context.startActivity(
                             android.content.Intent(
@@ -786,8 +871,8 @@ private fun ShizukuStatusCard(
                             ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
                     },
-                        border = BorderStroke(1.dp, Color(0xFF806A45)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFFC46B)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
                     ) { Text("APK 다운로드") }
                 }
             }
@@ -797,9 +882,27 @@ private fun ShizukuStatusCard(
 
 @Composable
 private fun StatusRow(label: String, ok: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(if (ok) "✅" else "❌")
-        Text("  $label", style = MaterialTheme.typography.bodyMedium)
+    val accent = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(accent.copy(alpha = 0.10f), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(if (ok) "✓" else "×", color = accent, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(
+            if (ok) "완료" else "미완료",
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = accent,
+        )
     }
 }
 
@@ -811,25 +914,37 @@ private fun StatusRow(label: String, ok: Boolean) {
 private fun AdvancedSection(userService: () -> IUserService?) {
     var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded }
-                .padding(vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // 설정 탭의 다른 항목이 전부 카드라 헤더도 카드로 감싼다 — 맨 줄로 두면 이 항목만
+        // 카드 사이에 떠 있는 것처럼 보인다.
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = CardDefaults.outlinedCardBorder(),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("문제 해결 도구", fontWeight = FontWeight.SemiBold)
-                Text(
-                    "게임 로그 연결 상태를 확인합니다.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text("문제 해결 도구", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "게임 로그 연결 상태를 확인합니다.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(
+                    if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (expanded) "접기" else "펼치기",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Icon(
-                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                contentDescription = if (expanded) "접기" else "펼치기",
-            )
         }
         if (expanded) {
             ProbeCard(userService = userService)
@@ -876,7 +991,7 @@ private fun ProbeCard(userService: () -> IUserService?) {
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text("로그 파일 프로브", fontWeight = FontWeight.SemiBold)
@@ -907,12 +1022,16 @@ private fun LogTailCard(userService: () -> IUserService?) {
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("로그 폴링 (M1)", fontWeight = FontWeight.SemiBold)
+            Text("로그 폴링 (M1)", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
 
             val svc = service
             val status by (svc?.status ?: MutableStateFlow(LogPoller.PollingStatus()))
@@ -984,7 +1103,6 @@ private fun RecentLines(lines: List<String>) {
 private fun OverlayCard() {
     val context = LocalContext.current
     var canDraw by remember { mutableStateOf(android.provider.Settings.canDrawOverlays(context)) }
-    var canReadUsage by remember { mutableStateOf(hasUsageAccess(context)) }
     val prefs = remember(context) { com.mttd.data.prefs.OverlayPrefs(context.applicationContext) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val timeTrackingMode by prefs.timeTrackingMode.collectAsStateWithLifecycle(
@@ -995,7 +1113,6 @@ private fun OverlayCard() {
     )
     var showMinimumMetricDialog by remember { mutableStateOf(false) }
     val panelEnabled by prefs.gamePanelEnabled.collectAsStateWithLifecycle(initialValue = true)
-    val autoStartOnGameLaunch by prefs.autoStartOnGameLaunch.collectAsStateWithLifecycle(initialValue = false)
 
     // 앱이 다시 포그라운드로 올 때 권한 상태 재확인
     LaunchedEffect(Unit) {
@@ -1003,22 +1120,27 @@ private fun OverlayCard() {
             kotlinx.coroutines.delay(500)
             val v = android.provider.Settings.canDrawOverlays(context)
             if (v != canDraw) canDraw = v
-            val usage = hasUsageAccess(context)
-            if (usage != canReadUsage) canReadUsage = usage
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("게임 화면 표시", fontWeight = FontWeight.SemiBold)
-            Text(
-                "게임을 하는 동안 수익 패널을 화면 위에 표시합니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("게임 화면 표시", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "게임을 하는 동안 수익 패널을 화면 위에 표시합니다.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             StatusRow("게임 위에 표시 권한", canDraw)
 
             if (!canDraw) {
@@ -1030,32 +1152,34 @@ private fun OverlayCard() {
                     context.startActivity(i)
                 }) { Text("게임 위 표시 허용") }
             } else {
+                // 시안은 켜짐/꺼짐을 색 전체(테두리·배경·문구·트랙)로 구분한다.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            if (panelEnabled) MaterialTheme.colorScheme.surface else Color(0xFF24131B),
-                            RoundedCornerShape(14.dp),
+                            if (panelEnabled) MaterialTheme.colorScheme.primaryContainer
+                            else MttdColors.DangerBg,
+                            RoundedCornerShape(13.dp),
                         )
                         .border(
                             1.dp,
-                            if (panelEnabled) Color(0xFF22C55E).copy(alpha = 0.45f)
-                            else Color(0xFFF87171).copy(alpha = 0.65f),
-                            RoundedCornerShape(14.dp),
+                            if (panelEnabled) MttdColors.BlueStrong else MttdColors.DangerLine,
+                            RoundedCornerShape(13.dp),
                         )
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text("게임 위 패널", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "게임 위 패널",
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            if (panelEnabled) "게임 화면에 표시 중입니다" else "현재 꺼져 있습니다",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (panelEnabled) Color(0xFF86EFAC)
-                            else Color(0xFFFCA5A5),
+                            if (panelEnabled) "현재 켜져 있습니다" else "현재 꺼져 있습니다",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (panelEnabled) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.error,
                         )
                     }
                     Switch(
@@ -1068,108 +1192,69 @@ private fun OverlayCard() {
                             }
                         },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFFDCFCE7),
-                            checkedTrackColor = Color(0xFF15803D),
-                            uncheckedThumbColor = Color(0xFFFECACA),
-                            uncheckedTrackColor = Color(0xFF7F1D1D),
+                            checkedThumbColor = MaterialTheme.colorScheme.surface,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            checkedBorderColor = MaterialTheme.colorScheme.primary,
+                            uncheckedThumbColor = MaterialTheme.colorScheme.surface,
+                            uncheckedTrackColor = MttdColors.ToggleOff,
+                            uncheckedBorderColor = MttdColors.ToggleOff,
                         ),
                     )
                 }
-            Text(
-                "미니패널을 탭하면 상세 패널이 열리고, 길게 누른 채 드래그하면 위치를 옮길 수 있습니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            HorizontalDivider()
-            Text("게임 실행 시 자동 시작", fontWeight = FontWeight.SemiBold)
-            Text(
-                "Shizuku가 준비된 상태에서 게임을 실행하면 mTTD가 로그 감시와 게임 위 패널을 자동으로 시작합니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            StatusRow("사용 기록 접근", canReadUsage)
-            if (!canReadUsage) {
-                Button(onClick = {
-                    context.startActivity(
-                        android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                }) { Text("사용 기록 접근 허용") }
-            }
-            Switch(
-                checked = autoStartOnGameLaunch,
-                enabled = canReadUsage,
-                onCheckedChange = { enabled ->
-                    scope.launch { prefs.setAutoStartOnGameLaunch(enabled) }
-                    if (enabled) com.mttd.service.TrackerForegroundService.startSelfManaged(context)
-                },
-            )
-            Text(
-                "재부팅 뒤에도 자동 시작을 유지합니다. 배터리 최적화가 강한 기기는 mTTD를 절전 예외로 설정해 주세요.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+                // 시안은 한 문장을 불릿 두 줄로 나눠 각각 짧게 읽히게 한다.
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    BulletLine("미니패널을 탭하면 상세 패널이 열립니다.")
+                    BulletLine("길게 누른 채 드래그하면 위치를 옮길 수 있습니다.")
+                }
             }
 
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("미니패널 표시 항목", fontWeight = FontWeight.SemiBold)
-            Text(
-                "게임 위 미니패널에서 볼 정보를 선택하세요.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Text(
-                "최소 1개의 항목은 선택해야 합니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFFFB923C),
-                fontWeight = FontWeight.SemiBold,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("미니패널 표시 항목", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "게임 위 미니패널에서 볼 정보를 선택하세요.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "최소 1개의 항목은 선택해야 합니다.",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            // 시안은 2열 고정 그리드. 세로 스크롤 Column 안이라 LazyVerticalGrid 는 쓸 수 없어
+            // FlowRow 의 maxItemsInEachRow 로 같은 배치를 만든다.
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
+                maxItemsInEachRow = 2,
             ) {
                 for (metric in com.mttd.ui.overlay.MiniPanelMetric.entries) {
                     val selected = metric.id in miniPanelMetrics
-                    val updateSelection: (Boolean) -> Unit = { checked ->
-                        val updated = if (checked) {
-                            miniPanelMetrics + metric.id
-                        } else {
-                            miniPanelMetrics - metric.id
-                        }
-                        if (updated.isEmpty()) {
-                            showMinimumMetricDialog = true
-                        } else {
-                            scope.launch { prefs.setMiniPanelMetrics(updated) }
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(
-                                width = 1.dp,
-                                color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.45f),
-                                shape = RoundedCornerShape(10.dp),
-                            )
-                            .clickable { updateSelection(!selected) }
-                            .padding(end = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(
-                            checked = selected,
-                            onCheckedChange = updateSelection,
-                        )
-                        Text(metric.settingsLabel, style = MaterialTheme.typography.labelLarge)
-                    }
+                    MetricChip(
+                        label = metric.settingsLabel,
+                        selected = selected,
+                        modifier = Modifier.weight(1f),
+                        onToggle = {
+                            val updated = if (!selected) miniPanelMetrics + metric.id
+                                          else miniPanelMetrics - metric.id
+                            if (updated.isEmpty()) showMinimumMetricDialog = true
+                            else scope.launch { prefs.setMiniPanelMetrics(updated) }
+                        },
+                    )
                 }
             }
             if (showMinimumMetricDialog) {
@@ -1179,13 +1264,13 @@ private fun OverlayCard() {
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
-                                .background(Color(0xFF4A260B), RoundedCornerShape(14.dp)),
+                            .background(MaterialTheme.colorScheme.secondaryContainer, RoundedCornerShape(14.dp)),
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
                                 Icons.Filled.WarningAmber,
                                 contentDescription = null,
-                                tint = Color(0xFFFB923C),
+                                tint = MaterialTheme.colorScheme.secondary,
                                 modifier = Modifier.size(25.dp),
                             )
                         }
@@ -1212,8 +1297,8 @@ private fun OverlayCard() {
                             onClick = { showMinimumMetricDialog = false },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF8A4B08),
-                                contentColor = Color(0xFFFFF3D6),
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
                             ),
                         ) { Text("확인") }
                     },
@@ -1222,17 +1307,24 @@ private fun OverlayCard() {
         }
     }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("시간 측정 방식", fontWeight = FontWeight.SemiBold)
-            Text(
-                "수익과 시간당 수익을 계산할 시간을 선택합니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("시간 측정 방식", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "수익과 시간당 수익을 계산할 시간을 선택합니다.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             TimeTrackingModeSelector(
                 current = timeTrackingMode,
                 onSelect = { mode -> scope.launch { prefs.setTimeTrackingMode(mode) } },
@@ -1241,39 +1333,155 @@ private fun OverlayCard() {
     }
 }
 
-private fun hasUsageAccess(context: android.content.Context): Boolean {
-    val appOps = context.getSystemService(android.app.AppOpsManager::class.java)
-    return appOps.unsafeCheckOpNoThrow(
-        android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-        android.os.Process.myUid(),
-        context.packageName,
-    ) == android.app.AppOpsManager.MODE_ALLOWED
-}
 
 @Composable
 private fun TimeTrackingModeSelector(
     current: com.mttd.domain.models.TimeTrackingMode,
     onSelect: (com.mttd.domain.models.TimeTrackingMode) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    // 시안은 라디오 버튼만 나열하지 않고 선택지 전체를 카드로 만들어 탭 영역을 넓힌다.
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (mode in com.mttd.domain.models.TimeTrackingMode.entries) {
+            val selected = current == mode
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .selectable(selected = current == mode, onClick = { onSelect(mode) })
-                    .padding(vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.primaryContainer else MttdColors.ChipOffBg,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .border(
+                        1.dp,
+                        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .selectable(selected = selected, onClick = { onSelect(mode) })
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                RadioButton(selected = current == mode, onClick = { onSelect(mode) })
-                Column {
-                    Text(mode.label, style = MaterialTheme.typography.bodyMedium)
+                RadioDot(selected = selected, modifier = Modifier.padding(top = 1.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(
+                        mode.label,
+                        fontSize = 14.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                    )
                     Text(
                         mode.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.5.sp,
+                        lineHeight = 18.sp,
+                        color = if (selected) MttdColors.TextMid
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
+        }
+    }
+}
+
+/** 시안의 불릿 한 줄 — 작은 점 + 보조 문구. */
+@Composable
+private fun BulletLine(text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Box(
+            modifier = Modifier
+                .padding(top = 7.dp)
+                .size(3.dp)
+                .background(MttdColors.TextMuted, androidx.compose.foundation.shape.CircleShape),
+        )
+        Text(
+            text,
+            fontSize = 11.5.sp,
+            lineHeight = 18.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * 시안의 미니패널 항목 칩. Material [Checkbox] 대신 20dp 정사각 체크 박스를 직접 그린다 —
+ * 기본 Checkbox 는 터치 타깃 패딩이 붙어 칩 안에서 정렬이 어긋난다.
+ */
+@Composable
+private fun MetricChip(
+    label: String,
+    selected: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer else MttdColors.ChipOffBg,
+                RoundedCornerShape(12.dp),
+            )
+            .border(
+                1.dp,
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .background(
+                    if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                    RoundedCornerShape(6.dp),
+                )
+                .border(
+                    1.5.dp,
+                    if (selected) MaterialTheme.colorScheme.primary else MttdColors.CheckboxOff,
+                    RoundedCornerShape(6.dp),
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(12.dp),
+                )
+            }
+        }
+        Text(
+            label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MttdColors.TextMid,
+        )
+    }
+}
+
+/** 시안의 라디오 표시 — 바깥 원 + 채워진 안쪽 점. */
+@Composable
+private fun RadioDot(selected: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(20.dp)
+            .border(
+                1.5.dp,
+                if (selected) MaterialTheme.colorScheme.primary else MttdColors.CheckboxOff,
+                androidx.compose.foundation.shape.CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape),
+            )
         }
     }
 }
@@ -1298,12 +1506,16 @@ private fun LoadoutExportCard() {
     val loadout by (service?.loadoutState ?: MutableStateFlow(null))
         .collectAsStateWithLifecycle()
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text("캐릭터 장비 내보내기", fontWeight = FontWeight.SemiBold)
+            Text("캐릭터 장비 내보내기", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Text(
                 "캐릭터 빌드 정보를 미니 토치DB로 보냅니다.",
                 style = MaterialTheme.typography.bodySmall,
@@ -1407,18 +1619,23 @@ private fun PriceCard() {
     // 자동 fetch 는 TrackerForegroundService 가 담당한다 (앱 UI 를 안 열어도 시세가 필요하므로).
     // 여기서 또 부르면 시즌 스윕이 중복 실행되므로 수동 새로고침 버튼만 남긴다.
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text("시세", fontWeight = FontWeight.SemiBold)
-
-            Text(
-                "가격 출처",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("시세", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "가격 출처",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             PriceSourceSelector(
                 current = priceState.source,
                 enabled = svc != null && !priceState.loading,
@@ -1645,17 +1862,25 @@ private fun ExitCard() {
     val context = LocalContext.current
     var confirmExit by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    // 기본 Card 는 채워진 회색이라 다른 설정 카드(흰 면 + 얇은 테두리)와 톤이 어긋났다.
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("앱 종료", fontWeight = FontWeight.SemiBold)
-            Text(
-                "로그 추적과 오버레이를 모두 중지하고 앱을 종료합니다.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("앱 종료", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "로그 추적과 오버레이를 모두 중지하고 앱을 종료합니다.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (confirmExit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { confirmExit = false }) { Text("취소") }
@@ -1663,11 +1888,28 @@ private fun ExitCard() {
                         com.mttd.service.TrackerForegroundService.stop(context)
                         (context as? android.app.Activity)?.finishAndRemoveTask()
                     }) {
-                        Text("종료 확인", color = Color(0xFFF87171))
+                        Text("종료 확인", color = MaterialTheme.colorScheme.error)
                     }
                 }
             } else {
-                OutlinedButton(onClick = { confirmExit = true }) { Text("앱 종료") }
+                OutlinedButton(
+                    onClick = { confirmExit = true },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(11.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MttdColors.DangerLine),
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Logout,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Spacer(Modifier.width(7.dp))
+                    Text("앱 종료", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
             }
         }
     }

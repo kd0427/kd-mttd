@@ -4,8 +4,6 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.app.usage.UsageEvents
-import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -63,9 +61,6 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     private lateinit var observedPrices: com.mttd.data.prices.ObservedPriceStore
     private lateinit var runRepo: com.mttd.data.runs.RunRepository
     private var overlay: OverlayHost? = null
-    private var gameLaunchMonitor: kotlinx.coroutines.Job? = null
-    @Volatile private var autoStartOnGameLaunch = false
-    @Volatile private var gameInForeground = false
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -183,12 +178,6 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         lifecycleScope.launch {
             overlayPrefs.timeTrackingMode.collect { aggregator.setTimeTrackingMode(it) }
         }
-        lifecycleScope.launch {
-            overlayPrefs.autoStartOnGameLaunch.collect { enabled ->
-                autoStartOnGameLaunch = enabled
-                if (enabled) startGameLaunchMonitor() else stopGameLaunchMonitor()
-            }
-        }
         ensureNotificationChannel()
         TrackerApplication.instance.setTrackerService(this)
         startPriceRefreshLoop()
@@ -268,14 +257,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             ACTION_START -> {
                 startForegroundOnce()
                 val path = intent.getStringExtra(EXTRA_LOG_PATH)
-                if (path != null) {
-                    startPoller(path)
-                } else {
-                    // 자동 시작 모드에서는 게임이 포그라운드가 될 때까지 폴러/패널을 띄우지 않는다.
-                    lifecycleScope.launch {
-                        if (!overlayPrefs.autoStartOnGameLaunch.first()) ensurePollerRunning()
-                    }
-                }
+                if (path != null) startPoller(path) else ensurePollerRunning()
                 ensureOverlayIfEnabled()
             }
             ACTION_STOP -> {
@@ -308,9 +290,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             // 예전엔 어느 분기에도 안 걸려서 foreground 승격도, 폴러 시작도 안 됐다.
             else -> {
                 startForegroundOnce()
-                lifecycleScope.launch {
-                    if (!overlayPrefs.autoStartOnGameLaunch.first()) ensurePollerRunning()
-                }
+                ensurePollerRunning()
                 ensureOverlayIfEnabled()
             }
         }
@@ -399,59 +379,13 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
      */
     private fun autoShowOverlay() {
         if (overlay != null) return
-        // 자동 시작 모드에서는 게임이 실제로 포그라운드가 된 뒤에만 패널을 띄운다.
-        if (autoStartOnGameLaunch && !gameInForeground) return
         if (!android.provider.Settings.canDrawOverlays(this)) return
         ensureOverlayIfEnabled()
-    }
-
-    private fun startGameLaunchMonitor() {
-        if (gameLaunchMonitor?.isActive == true) return
-        if (!hasUsageAccess()) return
-        gameLaunchMonitor = lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-            val usage = getSystemService(UsageStatsManager::class.java)
-            var lastQueryMs = System.currentTimeMillis()
-            while (true) {
-                val now = System.currentTimeMillis()
-                val events = usage.queryEvents(lastQueryMs, now)
-                val event = UsageEvents.Event()
-                var launched = false
-                while (events.hasNextEvent()) {
-                    events.getNextEvent(event)
-                    if (event.packageName in GAME_PACKAGES && event.eventType in FOREGROUND_EVENT_TYPES) {
-                        launched = true
-                    }
-                }
-                lastQueryMs = now
-                if (launched) {
-                    gameInForeground = true
-                    ensurePollerRunning()
-                    autoShowOverlay()
-                }
-                kotlinx.coroutines.delay(GAME_LAUNCH_POLL_MS)
-            }
-        }
-    }
-
-    private fun stopGameLaunchMonitor() {
-        gameLaunchMonitor?.cancel()
-        gameLaunchMonitor = null
-        gameInForeground = false
-    }
-
-    private fun hasUsageAccess(): Boolean {
-        val appOps = getSystemService(android.app.AppOpsManager::class.java)
-        return appOps.unsafeCheckOpNoThrow(
-            android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-            android.os.Process.myUid(),
-            packageName,
-        ) == android.app.AppOpsManager.MODE_ALLOWED
     }
 
     private fun ensureOverlayIfEnabled() {
         lifecycleScope.launch {
             if (!overlayPrefs.gamePanelEnabled.first()) return@launch
-            if (overlayPrefs.autoStartOnGameLaunch.first() && !gameInForeground) return@launch
             if (!android.provider.Settings.canDrawOverlays(this@TrackerForegroundService)) return@launch
             ensureOverlay()
             Log.i(TAG, "overlay auto-shown")
@@ -466,7 +400,6 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     override fun onDestroy() {
-        stopGameLaunchMonitor()
         stopPoller()
         destroyOverlay()
         TrackerApplication.instance.setTrackerService(null)
@@ -528,16 +461,6 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         /** Shizuku 준비 / 게임 패키지 탐색 재시도 간격. */
         private const val POLLER_BOOTSTRAP_RETRY_MS = 3_000L
         private const val MAX_RECENT_DEBUG_LINES = 10
-        private const val GAME_LAUNCH_POLL_MS = 1_000L
-        private val GAME_PACKAGES = setOf(
-            "com.xindong.torchlight",
-            "com.xd.TLglobal",
-            "com.xd.TLglobalTap",
-        )
-        private val FOREGROUND_EVENT_TYPES = setOf(
-            UsageEvents.Event.ACTIVITY_RESUMED,
-            UsageEvents.Event.MOVE_TO_FOREGROUND,
-        )
         const val ACTION_START = "com.mttd.action.START_LOG"
         const val ACTION_STOP = "com.mttd.action.STOP_LOG"
         const val ACTION_SHOW_OVERLAY = "com.mttd.action.SHOW_OVERLAY"

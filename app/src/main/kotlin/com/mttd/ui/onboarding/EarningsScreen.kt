@@ -22,7 +22,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -36,9 +47,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
@@ -47,6 +62,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -55,11 +71,15 @@ import com.mttd.domain.models.MapRun
 import com.mttd.domain.models.PickupSummary
 import com.mttd.domain.models.SessionState
 import com.mttd.ui.overlay.formatFire
+import com.mttd.ui.theme.MttdColors
 import kotlinx.coroutines.flow.MutableStateFlow
 
-private val POSITIVE = Color(0xFF4ADE80)
-private val NEGATIVE = Color(0xFFF87171)
-private val SELECTED = Color(0xFFFB923C)
+// 시안 팔레트와 같은 값. Canvas 의 onDraw 안에서도 써야 해서 MaterialTheme 을 읽을 수 없으므로
+// top-level 상수로 둔다 — Theme.kt 의 primary / error / onPrimaryContainer 와 항상 맞춰야 한다.
+// 시안에는 초록이 없어서, 수익의 부호는 블루↔빨강으로 구분하고 선택은 더 진한 블루로 띄운다.
+private val POSITIVE = Color(0xFF1687F8)
+private val NEGATIVE = Color(0xFFE5484D)
+private val SELECTED = Color(0xFF0F6BC9)
 
 /** 그래프 가로 격자선 기본 간격 (수익 단위). 회차 수익이 커지면 배수로 늘어난다. */
 private const val GRID_STEP = 50.0
@@ -72,9 +92,52 @@ private fun formatAxis(v: Double): String {
 }
 
 /**
+ * 회차가 하나도 없을 때의 빈 상태 블록.
+ *
+ * Compose 에는 점선 테두리 Modifier 가 없어서 [drawBehind] 로 직접 그린다.
+ */
+@Composable
+private fun EmptyRunsBlock() {
+    val radius = 12.dp
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background, RoundedCornerShape(radius))
+            .drawBehind {
+                val r = radius.toPx()
+                drawRoundRect(
+                    color = MttdColors.DashBorder,
+                    cornerRadius = CornerRadius(r, r),
+                    style = Stroke(
+                        width = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+                    ),
+                )
+            }
+            .padding(horizontal = 12.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.BarChart,
+            contentDescription = null,
+            tint = MttdColors.TextMuted,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            "아직 기록된 회차가 없습니다. 맵을 열면 회차가 시작됩니다.",
+            fontSize = 12.sp,
+            lineHeight = 18.sp,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
  * 회차별 수익 막대 그래프.
  *
- * - 막대 하나 = 맵 1회차. 높이는 |수익| 비례, 색은 부호(초록/빨강).
+ * - 막대 하나 = 맵 1회차. 높이는 |수익| 비례, 색은 부호(블루/빨강).
  * - 막대를 누르면 [onSelect] 로 회차 선택 → 상세 목록 표시.
  * - 회차가 많아지면 가로 스크롤.
  */
@@ -86,11 +149,7 @@ fun RunBarChart(
     modifier: Modifier = Modifier,
 ) {
     if (runs.isEmpty()) {
-        Text(
-            "아직 기록된 회차가 없습니다. 맵을 열면 회차가 시작됩니다.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        EmptyRunsBlock()
         return
     }
 
@@ -199,7 +258,7 @@ fun RunBarChart(
 
                     // 0 기준선 (격자보다 진하게)
                     drawLine(
-                        color = Color(0xFF94A3B8),
+                        color = MttdColors.TextMuted,
                         start = Offset(0f, zeroY),
                         end = Offset(size.width, zeroY),
                         strokeWidth = 2f,
@@ -344,23 +403,28 @@ fun RunDetailDialog(
  */
 @Composable
 fun TotalItemsCard(merged: List<PickupSummary>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("전체 획득 아이템", fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text("전체 획득 아이템", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
                 Text(
                     "${merged.size}종 · ${formatFire(merged.sumOf { it.value })}",
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            HorizontalDivider()
+            HorizontalDivider(color = MttdColors.DividerSoft)
             if (merged.isEmpty()) {
-                Text("(아직 없음)", style = MaterialTheme.typography.bodySmall)
+                Text("(아직 없음)", fontSize = 13.sp, color = MttdColors.TextMuted)
             } else {
                 ItemRowHeader()
                 for (p in merged) ItemRow(p)
@@ -384,44 +448,165 @@ fun ValueScreen() {
     val session by (service?.sessionState ?: MutableStateFlow(SessionState()))
         .collectAsStateWithLifecycle()
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    val totalValue = session.holdings.sumOf { it.value }
+
+    // 시안의 가치 탭처럼 요약과 목록을 분리해, 보유 아이템이 아직 없을 때도
+    // 화면이 비어 보이지 않도록 한다.
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 16.dp, bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("보유 아이템 가치", fontWeight = FontWeight.SemiBold)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text("보유 아이템 가치", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "${session.holdings.size}종 · ${formatFire(session.holdings.sumOf { it.value })}",
-                        style = MaterialTheme.typography.bodySmall,
+                        "${session.holdings.size}종 · ${formatFire(totalValue)}",
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                // 시안의 새로고침은 사각 버튼이 아니라 블루 톤 캡슐이다.
                 OutlinedButton(
                     onClick = { service?.refreshHoldings() },
                     enabled = service != null,
-                ) { Text("새로고침") }
+                    modifier = Modifier.height(36.dp),
+                    shape = CircleShape,
+                    contentPadding = PaddingValues(horizontal = 14.dp),
+                    border = BorderStroke(1.dp, MttdColors.BlueBorder),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                    ),
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("새로고침", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
             }
+            Text(
+                formatFire(totalValue),
+                fontSize = 40.sp,
+                lineHeight = 42.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = (-1).sp,
+                color = MaterialTheme.colorScheme.primary,
+            )
             if (session.inExchange) {
                 Text(
                     "🏪 거래소 화면이 열려있어 집계가 일시정지되었습니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.secondary,
                 )
             }
-            HorizontalDivider()
-            if (session.holdings.isEmpty()) {
-                Text(
-                    "(거래소에 들어가거나 새로고침을 누르면 보유 아이템이 표시됩니다)",
-                    style = MaterialTheme.typography.bodySmall,
+            HorizontalDivider(color = MttdColors.DividerSoft)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    Icons.Outlined.Info,
+                    contentDescription = null,
+                    tint = MttdColors.BlueFaint,
+                    modifier = Modifier.size(15.dp),
                 )
-            } else {
+                Text(
+                    "거래소에 들어가거나 새로고침을 누르면 보유 아이템이 표시됩니다.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
+        if (session.holdings.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                // 시안의 빈 상태 아이콘 박스 — 글리프 대신 테두리 있는 사각 박스에 아이콘을 담는다.
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(MaterialTheme.colorScheme.background, RoundedCornerShape(20.dp))
+                        .border(1.dp, MttdColors.DividerSoft, RoundedCornerShape(20.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Outlined.Inventory2,
+                        contentDescription = null,
+                        tint = MttdColors.TextMuted,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("표시할 아이템이 없습니다", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "거래소에 한 번 진입하면 보유 아이템과\n개별 시세가 이 목록에 표시됩니다.",
+                        fontSize = 12.sp,
+                        lineHeight = 19.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                Button(
+                    onClick = { service?.refreshHoldings() },
+                    enabled = service != null,
+                    modifier = Modifier.height(42.dp),
+                    shape = RoundedCornerShape(11.dp),
+                    contentPadding = PaddingValues(horizontal = 18.dp),
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("지금 새로고침", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("보유 아이템 목록", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                HorizontalDivider(color = MttdColors.DividerSoft)
                 ItemRowHeader()
                 for (p in session.holdings) ItemRow(p)
             }
         }
     }
+
+    // 시안 하단 캡션.
+    Text(
+        "아이템 목록은 시세 갱신 시각 기준으로 정렬됩니다",
+        fontSize = 11.sp,
+        color = MttdColors.TextMuted,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+    )
+
+    Text(
+        "아이템 목록은 시세 갱신 시각 기준으로 정렬됩니다.",
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+    )
 }
 
 @Composable

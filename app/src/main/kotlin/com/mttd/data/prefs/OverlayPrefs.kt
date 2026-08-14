@@ -66,10 +66,6 @@ class OverlayPrefs(private val context: Context) {
     val hudVisible: Flow<Boolean> = context.dataStore.data.map { it[KEY_HUD_VISIBLE] ?: false }
     /** 게임 위 패널 표시 여부. 기본값은 표시 상태. */
     val gamePanelEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_GAME_PANEL_ENABLED] ?: true }
-    /** 게임 실행을 감지해 로그 폴링과 오버레이를 자동으로 시작한다. */
-    val autoStartOnGameLaunch: Flow<Boolean> = context.dataStore.data.map {
-        it[KEY_AUTO_START_ON_GAME_LAUNCH] ?: false
-    }
     val miniPanelCardAlignmentApplied: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_MINI_PANEL_CARD_ALIGNMENT_APPLIED] ?: false
     }
@@ -114,10 +110,6 @@ class OverlayPrefs(private val context: Context) {
         context.dataStore.edit { it[KEY_GAME_PANEL_ENABLED] = v }
     }
 
-    suspend fun setAutoStartOnGameLaunch(v: Boolean) {
-        context.dataStore.edit { it[KEY_AUTO_START_ON_GAME_LAUNCH] = v }
-    }
-
     suspend fun markMiniPanelCardAlignmentApplied() {
         context.dataStore.edit { it[KEY_MINI_PANEL_CARD_ALIGNMENT_APPLIED] = true }
     }
@@ -133,7 +125,6 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_HUD_ALPHA = floatPreferencesKey("hud_alpha")
         private val KEY_HUD_VISIBLE = booleanPreferencesKey("hud_visible")
         private val KEY_GAME_PANEL_ENABLED = booleanPreferencesKey("game_panel_enabled")
-        private val KEY_AUTO_START_ON_GAME_LAUNCH = booleanPreferencesKey("auto_start_on_game_launch")
         private val KEY_MINI_PANEL_CARD_ALIGNMENT_APPLIED = booleanPreferencesKey("mini_panel_card_alignment_applied")
         private val KEY_WIZARD_COMPLETED = booleanPreferencesKey("wizard_completed")
         private val KEY_PRICE_SOURCE = androidx.datastore.preferences.core.stringPreferencesKey("price_source")

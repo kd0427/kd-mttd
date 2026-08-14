@@ -161,7 +161,9 @@ class OverlayHost(
                 sessionState = sessionState,
                 priceState = priceState,
                 onCollapse = { hideHud() },
-                onExitApp = { com.mttd.service.TrackerForegroundService.stop(context) },
+                onExitApp = {
+                    com.mttd.TrackerApplication.instance.trackerService.value?.exitApp()
+                },
                 onOpenSettings = {
                     val i = android.content.Intent(context, com.mttd.MainActivity::class.java)
                         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)

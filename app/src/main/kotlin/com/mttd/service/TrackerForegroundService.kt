@@ -277,10 +277,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
                 ensureOverlayIfEnabled()
             }
             ACTION_STOP -> {
-                stopPoller()
-                destroyOverlay()
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
+                teardown()
                 return START_NOT_STICKY
             }
             ACTION_SHOW_OVERLAY -> {
@@ -413,6 +410,39 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         pollerBootstrap = null
         poller?.stop()
         poller = null
+    }
+
+    /** 폴러·오버레이·알림을 걷고 서비스를 내린다. 액티비티는 그대로 남는다. */
+    private fun teardown() {
+        stopPoller()
+        destroyOverlay()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    /**
+     * mTTD 를 통째로 끈다 — 설정의 "앱 종료" 와 같은 결과다.
+     *
+     * 서비스만 내리면 액티비티와 최근 앱의 카드가 그대로 남아서, 오버레이만 사라지고
+     * "종료했는데 앱은 아직 열려 있는" 상태가 된다. 태스크까지 걷어내야 완전히 닫힌다.
+     *
+     * 순서가 중요하다: 매니페스트가 `stopWithTask=true` 라 태스크를 먼저 없애면 서비스가
+     * 그 자리에서 죽고, 뒤늦게 도착한 정리 요청이 서비스를 다시 띄운다. 그래서 여기서는
+     * 인텐트를 거치지 않고 직접 정리한 뒤 태스크를 제거한다.
+     *
+     * 한 틱 미루는 이유: 이 호출은 오버레이 버튼의 터치 처리 도중에 들어오는데,
+     * [destroyOverlay] 가 바로 그 뷰를 WindowManager 에서 떼어낸다. 터치 이벤트 전달이
+     * 끝난 다음에 걷어내도록 메인 루퍼로 넘긴다.
+     */
+    fun exitApp() {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            teardown()
+            runCatching {
+                getSystemService(android.app.ActivityManager::class.java)
+                    ?.appTasks
+                    ?.forEach { it.finishAndRemoveTask() }
+            }.onFailure { Log.w(TAG, "finishAndRemoveTask failed", it) }
+        }
     }
 
     override fun onDestroy() {

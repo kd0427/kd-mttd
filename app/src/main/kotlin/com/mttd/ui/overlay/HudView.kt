@@ -120,7 +120,7 @@ fun HudOverlay(
     onTogglePause: () -> Unit = {},
     onRefreshHoldings: () -> Unit = {},
     onReset: () -> Unit = {},
-    /** mTTD 자체를 종료한다. 되돌릴 수 없으므로 길게 눌러야 실행된다. */
+    /** mTTD 자체를 종료한다. 되돌릴 수 없으므로 두 번 탭해야 실행된다. */
     onExitApp: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
@@ -200,9 +200,9 @@ fun HudOverlay(
                     HudLongPressIconButton(Icons.Filled.Refresh, onReset)
                 }
                 Spacer(Modifier.width(3.dp))
-                // 종료는 세션을 통째로 버리므로(서비스가 죽으면 새 세션으로 시작한다)
-                // 리셋과 같은 1 초 길게 누르기로 둔다. 실수로 스치면 안 된다.
-                HudLongPressIconButton(Icons.AutoMirrored.Filled.Logout, onExitApp)
+                // 종료는 세션을 통째로 버리므로(앱이 꺼지고, 다시 켜면 새 세션이다)
+                // 한 번 탭으로는 안 되게 두 번 탭으로 둔다. 실수로 스치면 안 된다.
+                HudDoubleTapIconButton(Icons.AutoMirrored.Filled.Logout, onExitApp)
 
 
             }
@@ -504,6 +504,32 @@ private fun HudLongPressIconButton(icon: ImageVector, onLongClick: () -> Unit) {
         Icon(
             imageVector = icon,
             contentDescription = "1초 길게 눌러 초기화",
+            tint = Color(0xFFF87171),
+            modifier = Modifier.size(16.dp),
+        )
+    }
+}
+
+/** 실수 방지를 위해 두 번 탭해야만 실행되는 아이콘 버튼 (한 번 탭은 아무 일도 하지 않는다). */
+@Composable
+private fun HudDoubleTapIconButton(icon: ImageVector, onDoubleTap: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
+    Box(
+        modifier = Modifier
+            .size(24.dp)
+            .pointerInput(onDoubleTap) {
+                detectTapGestures(
+                    onDoubleTap = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onDoubleTap()
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = "두 번 탭해서 mTTD 종료",
             tint = Color(0xFFF87171),
             modifier = Modifier.size(16.dp),
         )

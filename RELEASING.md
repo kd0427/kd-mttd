@@ -24,8 +24,16 @@ base64 < release.jks | tr -d '\n'
 ## 새 버전 배포
 
 1. [app/build.gradle.kts](app/build.gradle.kts)의 `versionCode`를 이전보다 크게 올리고 `versionName`을 새 버전으로 바꾼다.
-2. 변경을 `main`에 커밋하고 푸시한다.
-3. 같은 버전의 tag를 만들고 푸시한다.
+2. **릴리스 빌드가 통과하는지 로컬에서 먼저 확인한다.**
+
+   ```bash
+   ./gradlew :app:assembleRelease
+   ```
+
+   R8 난독화·리소스 축소·`lintVital`은 **릴리스 빌드에만** 걸린다. 디버그가 통과해도 릴리스가 깨질 수 있다 — [proguard-rules.pro](app/proguard-rules.pro)에 protobuf-lite·AIDL·kotlinx-serialization 유지 규칙이 있는 것도 실제로 그렇게 깨졌기 때문이다. 이 단계를 건너뛰고 tag부터 밀면 워크플로가 실패해야 알게 되고, 릴리스는 만들어지지 않는다.
+
+3. 변경을 `main`에 커밋하고 푸시한다.
+4. 같은 버전의 tag를 만들고 푸시한다.
 
 ```bash
 git tag v0.3.7-kd
@@ -35,3 +43,13 @@ git push origin v0.3.7-kd
 워크플로가 끝나면 GitHub Releases에서 `kd-mttd-0.3.7-kd-release.apk`를 내려받을 수 있다.
 
 > Tag의 버전과 `versionName`은 반드시 같게 유지한다. 앱 내부 업데이트 확인은 GitHub Release tag를 기준으로 비교한다.
+
+## 릴리스 노트
+
+워크플로는 `generate_release_notes: true`로 만들기 때문에 본문이 `Full Changelog` 한 줄뿐이다. 바뀐 내용을 직접 쓰려면 릴리스가 만들어진 뒤에 덧붙인다.
+
+```bash
+gh release edit v0.3.7-kd --repo kd0427/kd-mttd --notes-file notes.md
+```
+
+> `gh`는 이 저장소에서 remote가 둘(`origin`=내 포크, `upstream`=원본)이라 **`--repo kd0427/kd-mttd`를 반드시 붙인다.** 안 붙이면 원본 저장소를 향한다.

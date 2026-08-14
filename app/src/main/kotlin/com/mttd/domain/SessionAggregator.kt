@@ -775,6 +775,7 @@ class SessionAggregator(
                 sessionItems = items,
                 recentPickups = current?.items?.take(MAX_RECENT_PICKUPS) ?: emptyList(),
                 currentMapValue = current?.totalValue ?: 0.0,
+                netCurrentMapValue = current?.netTotalValue ?: 0.0,
                 totalValue = all.sumOf { it.totalValue },
                 netTotalValue = all.sumOf { it.netTotalValue },
                 pickupCount = all.sumOf { it.pickupCount },
@@ -1054,7 +1055,7 @@ class SessionAggregator(
         private const val MAX_XCHG_BLOCK_LINES = 400
         /** 보관할 최대 회차 수. 넘으면 오래된 것부터 버린다. */
         private const val MAX_RUNS = 200
-        /** "가치" 탭/HUD 에 보여줄 최대 보유 아이템 종류 수 (가치 내림차순으로 자름). */
+        /** "자산" 탭/HUD 에 보여줄 최대 보유 아이템 종류 수 (가치 내림차순으로 자름). */
         private const val MAX_HOLDINGS = 50
         const val MAX_TIME_SAMPLES = 60   // 1분당 1점 × 60 = 최근 1시간
     }

@@ -116,6 +116,7 @@ class OverlayHost(
             IconOverlay(
                 sessionState = sessionState,
                 metricFlow = prefs.miniPanelMetrics,
+                netValueFlow = prefs.miniPanelNetValue,
                 maxPanelWidthPx = (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260)),
                 onTogglePause = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.togglePause()

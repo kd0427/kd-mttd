@@ -90,6 +90,8 @@ enum class BadgeIncomeMetric(val id: String, val label: String, val perHour: Boo
 fun IconOverlay(
     sessionState: StateFlow<SessionState>,
     metricFlow: Flow<Set<String>> = flowOf(MiniPanelMetric.DEFAULT_IDS),
+    /** true 면 수익을 경매장 세금(1/8) 뺀 실수령으로 보여준다. */
+    netValueFlow: Flow<Boolean> = flowOf(false),
     maxPanelWidthPx: Int? = null,
     onTogglePause: () -> Unit = {},
     onReset: () -> Unit = {},
@@ -99,6 +101,7 @@ fun IconOverlay(
     val selectedMetricIds by metricFlow.collectAsStateWithLifecycle(
         initialValue = MiniPanelMetric.DEFAULT_IDS,
     )
+    val showNet by netValueFlow.collectAsStateWithLifecycle(initialValue = false)
 
     // 경과 시간을 흘려보내기 위한 1 초 틱.
     // 예전엔 `while (true)` 라 일시정지·집계 대기 상태에서도 영원히 깨어나
@@ -115,9 +118,12 @@ fun IconOverlay(
     val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.elapsedMs
     }
-    val perHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
-        session.incomePerHour
+    val perHour = remember(session.totalValue, session.netTotalValue, showNet, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
+        if (showNet) session.netIncomePerHour else session.incomePerHour
     }
+    // 세전/세후 전환은 표시 값만 바꾼다 — 집계는 항상 두 값을 다 들고 있다.
+    val totalValue = if (showNet) session.netTotalValue else session.totalValue
+    val currentMapValue = if (showNet) session.netCurrentMapValue else session.currentMapValue
     val currentMapElapsed = remember(
         session.currentMapElapsedAccumulatedMs,
         session.currentMapElapsedSinceMs,
@@ -187,14 +193,17 @@ fun IconOverlay(
                         SummaryMetric("맵핑 횟수", "${session.mapsEntered}회", primaryColor, metricWidth)
                     MiniPanelMetric.CURRENT_MAP_TIME ->
                         SummaryMetric("현재 맵", formatElapsedIcon(currentMapElapsed), primaryColor, metricWidth)
+                    // 라벨은 세전/세후 어느 쪽이든 그대로 둔다. 칸이 최소 34dp/7sp 라
+                    // "세후" 를 붙이면 잘리고, 세 지표 중 일부만 붙이면 더 헷갈린다.
+                    // 어느 쪽인지 확인이 필요하면 탭해서 상세 패널을 보면 둘 다 나온다.
                     MiniPanelMetric.TOTAL_VALUE ->
-                        SummaryMetric("총 수익", formatFire(session.totalValue), valueColor(session.totalValue), metricWidth)
+                        SummaryMetric("총 수익", formatFire(totalValue), valueColor(totalValue, showNet), metricWidth)
                     MiniPanelMetric.TOTAL_TIME ->
                         SummaryMetric("총 시간", if (elapsed > 0) formatElapsedIcon(elapsed) else "대기", primaryColor, metricWidth)
                     MiniPanelMetric.INCOME_PER_HOUR ->
-                        SummaryMetric("시간당", formatFire(perHour) + "/h", valueColor(perHour), metricWidth)
+                        SummaryMetric("시간당", formatFire(perHour) + "/h", valueColor(perHour, showNet), metricWidth)
                     MiniPanelMetric.CURRENT_MAP_VALUE ->
-                        SummaryMetric("이번 맵", formatFire(session.currentMapValue), valueColor(session.currentMapValue), metricWidth)
+                        SummaryMetric("이번 맵", formatFire(currentMapValue), valueColor(currentMapValue, showNet), metricWidth)
                 }
                 if (index < selectedMetrics.lastIndex) Spacer(Modifier.width(gap))
             }
@@ -309,9 +318,17 @@ private fun SummaryItemButton(onClick: () -> Unit) {
     }
 }
 
-private fun valueColor(value: Double): Color = when {
+/**
+ * 수익 숫자 색. 두 가지를 한 채널에 싣는다.
+ *
+ * - **부호**가 우선이다. 음수는 어느 모드든 빨강 — "이번 맵" 은 맵을 열 때 나침반·비콘을
+ *   소비해서 초반엔 거의 항상 음수라, 여기서 손실을 못 읽으면 실질적인 손해다.
+ * - **모드**는 양수일 때만 나타낸다. 세전은 초록, 세후는 파랑([HudOverlay] 가 이미 쓰는
+ *   톤이라 어두운 패널 위 가독성이 검증돼 있다). 라벨을 붙일 공간이 없어 색으로 구분한다.
+ */
+private fun valueColor(value: Double, showNet: Boolean): Color = when {
     value < 0 -> Color(0xFFF87171)
-    value > 0 -> Color(0xFF4ADE80)
+    value > 0 -> if (showNet) Color(0xFF60A5FA) else Color(0xFF4ADE80)
     else -> Color(0xFFCBD5E1)
 }
 

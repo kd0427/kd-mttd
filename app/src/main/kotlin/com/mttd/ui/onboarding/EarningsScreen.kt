@@ -434,7 +434,7 @@ fun TotalItemsCard(merged: List<PickupSummary>) {
 }
 
 /**
- * "가치" 탭 — 현재 보유 아이템을 가치 내림차순으로 표시.
+ * "자산" 탭 — 현재 가방에 있는 아이템을 가치 내림차순으로 표시.
  *
  * 거래소(경매장) 진입 시 [com.mttd.domain.SessionAggregator.enterExchange] 가 자동으로
  * 갱신하고, 여기서는 수동 새로고침 버튼만 노출한다. 슬롯 상태(`slotLastCount`)는 항상
@@ -450,7 +450,7 @@ fun ValueScreen() {
 
     val totalValue = session.holdings.sumOf { it.value }
 
-    // 시안의 가치 탭처럼 요약과 목록을 분리해, 보유 아이템이 아직 없을 때도
+    // 시안의 자산 탭처럼 요약과 목록을 분리해, 보유 아이템이 아직 없을 때도
     // 화면이 비어 보이지 않도록 한다.
     Card(
         modifier = Modifier.fillMaxWidth(),

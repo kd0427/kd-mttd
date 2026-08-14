@@ -47,6 +47,18 @@ class OverlayPrefs(private val context: Context) {
         context.dataStore.edit { it[KEY_MINI_PANEL_METRICS] = ids }
     }
 
+    /**
+     * 미니패널의 수익을 세후(경매장 세금 1/8 차감)로 보여줄지. 기본은 세전(시장가) —
+     * 지금까지의 동작이고, 상세 패널(HUD)이 세전·세후를 나란히 보여주는 기준도 세전이다.
+     */
+    val miniPanelNetValue: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_MINI_PANEL_NET_VALUE] ?: false
+    }
+
+    suspend fun setMiniPanelNetValue(v: Boolean) {
+        context.dataStore.edit { it[KEY_MINI_PANEL_NET_VALUE] = v }
+    }
+
     /** HUD 총 시간/시간당 수익의 집계 기준. */
     val timeTrackingMode: Flow<TimeTrackingMode> = context.dataStore.data.map {
         TimeTrackingMode.fromId(it[KEY_TIME_TRACKING_MODE] ?: TimeTrackingMode.MAP_ONLY.id)
@@ -130,6 +142,7 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_PRICE_SOURCE = androidx.datastore.preferences.core.stringPreferencesKey("price_source")
         private val KEY_BADGE_METRIC = androidx.datastore.preferences.core.stringPreferencesKey("badge_income_metric")
         private val KEY_MINI_PANEL_METRICS = stringSetPreferencesKey("mini_panel_metrics")
+        private val KEY_MINI_PANEL_NET_VALUE = booleanPreferencesKey("mini_panel_net_value")
         private val KEY_TIME_TRACKING_MODE = androidx.datastore.preferences.core.stringPreferencesKey("time_tracking_mode")
         const val POSITION_UNSET = Int.MIN_VALUE
     }

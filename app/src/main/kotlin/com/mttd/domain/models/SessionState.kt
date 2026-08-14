@@ -27,6 +27,8 @@ data class SessionState(
      * [recentPickups] 는 상위 N 개로 잘리므로 그걸 더하면 안 되고, 전체 합을 따로 들고 간다.
      */
     val currentMapValue: Double = 0.0,
+    /** [currentMapValue] 의 세후(실수령) 버전. 미니패널의 세전/세후 전환에 쓴다. */
+    val netCurrentMapValue: Double = 0.0,
 
     /**
      * 회차별 기록. 마지막 항목이 진행 중인 회차.

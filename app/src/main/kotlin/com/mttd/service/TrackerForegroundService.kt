@@ -125,7 +125,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     }
     fun togglePause() = aggregator.togglePause()
 
-    /** "가치" 탭/거래소 HUD 의 수동 새로고침 버튼에서 호출. */
+    /** "자산" 탭/거래소 HUD 의 수동 새로고침 버튼에서 호출. */
     fun refreshHoldings() = aggregator.refreshHoldings()
 
     /**

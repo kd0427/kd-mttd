@@ -93,9 +93,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * 상단 탭. "수익"(이번 세션에 번 것)과 "자산"(지금 가방에 있는 것)은 흐름과 잔고의 관계라,
+ * 나란히 놓으면 서로를 설명한다 — 예전 이름 "가치" 는 무엇의 가치인지가 드러나지 않았다.
+ */
 private enum class MainTab(val label: String) {
     EARNINGS("수익"),
-    VALUE("가치"),
+    VALUE("자산"),
     SETTINGS("설정"),
 }
 
@@ -1139,6 +1143,7 @@ private fun OverlayCard() {
     )
     var showMinimumMetricDialog by remember { mutableStateOf(false) }
     val panelEnabled by prefs.gamePanelEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val miniPanelNetValue by prefs.miniPanelNetValue.collectAsStateWithLifecycle(initialValue = false)
 
     // 앱이 다시 포그라운드로 올 때 권한 상태 재확인
     LaunchedEffect(Unit) {
@@ -1283,6 +1288,23 @@ private fun OverlayCard() {
                     )
                 }
             }
+
+            HorizontalDivider(color = MttdColors.DividerSoft)
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("수익 표시", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "총 수익 · 시간당 · 이번 맵에 적용됩니다.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            NetValueSelector(
+                showNet = miniPanelNetValue,
+                onSelect = { v -> scope.launch { prefs.setMiniPanelNetValue(v) } },
+            )
+            BulletLine("미니패널 숫자 색으로 구분됩니다 — 세전은 초록, 세후는 파랑. 마이너스는 어느 쪽이든 빨강입니다.")
             if (showMinimumMetricDialog) {
                 AlertDialog(
                     onDismissRequest = { showMinimumMetricDialog = false },
@@ -1405,6 +1427,74 @@ private fun TimeTrackingModeSelector(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * 미니패널 수익을 세전(시장가) / 세후(실수령) 중 무엇으로 보여줄지.
+ *
+ * 시간 측정 방식과 같은 라디오 카드 형태를 쓴다 — 같은 설정 화면에서 같은 성격의 선택은
+ * 같은 모양이어야 한다.
+ */
+@Composable
+private fun NetValueSelector(showNet: Boolean, onSelect: (Boolean) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        NetValueOption(
+            label = "세전 (시장가)",
+            help = "경매장에 올린 가격 그대로 계산합니다.",
+            selected = !showNet,
+            onSelect = { onSelect(false) },
+        )
+        NetValueOption(
+            label = "세후 (실수령)",
+            help = "경매장 세금 1/8을 뺀 실제로 손에 쥐는 금액입니다. 최초의 불꽃 결정과 소비 항목에는 세금이 붙지 않습니다.",
+            selected = showNet,
+            onSelect = { onSelect(true) },
+        )
+    }
+}
+
+@Composable
+private fun NetValueOption(
+    label: String,
+    help: String,
+    selected: Boolean,
+    onSelect: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer else MttdColors.ChipOffBg,
+                RoundedCornerShape(12.dp),
+            )
+            .border(
+                1.dp,
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(12.dp),
+            )
+            .selectable(selected = selected, onClick = onSelect)
+            .padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        RadioDot(selected = selected, modifier = Modifier.padding(top = 1.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                label,
+                fontSize = 14.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            )
+            Text(
+                help,
+                fontSize = 11.5.sp,
+                lineHeight = 18.sp,
+                color = if (selected) MttdColors.TextMid else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

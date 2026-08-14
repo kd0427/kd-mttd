@@ -24,10 +24,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // 심해 보석 테마는 어두운 배경이므로 상태바·내비게이션 바 아이콘도 밝게 고정한다.
+        // 앱 팔레트가 밝은 배경으로 고정돼 있으므로(ui/theme/Theme.kt) 시스템 바에도 "배경이 밝다"고
+        // 알려 아이콘을 어둡게 그리게 한다. 이 플래그는 아이콘 색이 아니라 **배경의 밝기**를 뜻한다 —
+        // false 로 두면 enableEdgeToEdge() 로 바 뒤까지 그려진 흰 배경 위에 흰 아이콘이 얹혀
+        // 시계·배터리가 보이지 않는다.
         WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
         }
 
         val shizuku = TrackerApplication.instance.shizukuManager

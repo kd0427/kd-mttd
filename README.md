@@ -11,6 +11,29 @@
 
 `고인물 mTTD`는 [listil/mttd](https://github.com/listil/mttd)를 바탕으로 만든 개인 커스텀 포크입니다. 게임을 조작하거나 게임 메모리를 읽지 않습니다. **게임이 스스로 기록하는 로그 파일만 읽어** 획득·소비 아이템과 시세를 바탕으로 수익을 계산합니다.
 
+## ⬇️ 다운로드
+
+<p align="center">
+  <a href="https://github.com/kd0427/kd-mttd/releases/latest">
+    <img src="https://img.shields.io/badge/APK%20내려받기-최신%20버전-1687F8?style=for-the-badge&logo=android&logoColor=white" alt="최신 버전 APK 내려받기" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/kd0427/kd-mttd/releases/latest"><img src="https://img.shields.io/github/v/release/kd0427/kd-mttd?label=%EC%B5%9C%EC%8B%A0%20%EB%B2%84%EC%A0%84&color=1687F8" alt="최신 버전" /></a>
+  <a href="https://github.com/kd0427/kd-mttd/releases"><img src="https://img.shields.io/github/downloads/kd0427/kd-mttd/total?label=%EC%B4%9D%20%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C&color=748094" alt="총 다운로드" /></a>
+</p>
+
+1. 위 버튼을 눌러 릴리스 페이지로 이동합니다.
+2. **Assets** 아래의 `kd-mttd-….apk` 를 탭해 내려받습니다.
+3. 받은 파일을 열어 설치합니다.
+
+> 💡 설치가 막히면 파일을 연 앱(브라우저·파일 관리자)에 대해 **“출처를 알 수 없는 앱 설치 허용”** 을 켜주세요.
+>
+> 🔄 이미 쓰고 계신다면 앱 안에서 **업데이트 확인** 을 누르는 편이 빠릅니다. 새 버전이 있으면 바뀐 내용이 그 자리에서 펼쳐집니다.
+
+설치한 뒤에는 [처음 사용하는 방법](#-처음-사용하는-방법)을 따라 Shizuku를 준비하면 됩니다. 지난 버전은 [Releases](https://github.com/kd0427/kd-mttd/releases) 에서 받을 수 있습니다.
+
 ## ✨ 무엇을 할 수 있나요?
 
 | 기능 | 쉬운 설명 |
@@ -38,11 +61,7 @@ Android 11부터 일반 앱은 다른 앱의 `Android/data` 파일에 바로 접
 
 ### 1. APK 설치
 
-1. 이 저장소의 [Releases](https://github.com/kd0427/kd-mttd/releases) 페이지에서 최신 `kd-mttd-…-release.apk`를 다운로드합니다.
-2. 다운로드한 APK를 휴대폰에서 엽니다.
-3. Android에서 표시하는 설치 안내에 따라 **설치**합니다.
-
-> 💡 설치가 막히면 파일을 연 앱에 대해 “출처를 알 수 없는 앱 설치 허용”을 켜주세요.
+위 [다운로드](#-다운로드) 에서 받아 설치합니다.
 
 ### 2. Shizuku 준비
 

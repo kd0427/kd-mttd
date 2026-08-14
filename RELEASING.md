@@ -36,11 +36,13 @@ base64 < release.jks | tr -d '\n'
 4. 같은 버전의 tag를 만들고 푸시한다.
 
 ```bash
-git tag v0.3.7-kd
-git push origin v0.3.7-kd
+git tag v0.5.8
+git push origin v0.5.8
 ```
 
-워크플로가 끝나면 GitHub Releases에서 `kd-mttd-0.3.7-kd-release.apk`를 내려받을 수 있다.
+Tag는 `v` + `versionName` 이다. 접미사는 붙이지 않는다.
+
+워크플로가 끝나면 GitHub Releases에서 `kd-mttd-0.5.8-release.apk`를 내려받을 수 있다.
 
 > Tag의 버전과 `versionName`은 반드시 같게 유지한다. 앱 내부 업데이트 확인은 GitHub Release tag를 기준으로 비교한다.
 
@@ -49,7 +51,7 @@ git push origin v0.3.7-kd
 워크플로는 `generate_release_notes: true`로 만들기 때문에 본문이 `Full Changelog` 한 줄뿐이다. 바뀐 내용을 직접 쓰려면 릴리스가 만들어진 뒤에 덧붙인다.
 
 ```bash
-gh release edit v0.3.7-kd --repo kd0427/kd-mttd --notes-file notes.md
+gh release edit v0.5.8 --repo kd0427/kd-mttd --notes-file notes.md
 ```
 
 > `gh`는 이 저장소에서 remote가 둘(`origin`=내 포크, `upstream`=원본)이라 **`--repo kd0427/kd-mttd`를 반드시 붙인다.** 안 붙이면 원본 저장소를 향한다. 기본 저장소를 포크로 고정해 두긴 했지만(`gh repo set-default`, `CUSTOMIZATION.md` 참고) 그 설정은 `.git/config`에만 있어서 새로 clone 하면 사라진다.

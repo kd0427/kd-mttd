@@ -38,6 +38,12 @@ class SessionAggregator(
     )
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
+    /** 맵 안/밖 판정이 바뀐 이력. 진단 화면에서만 쓴다. */
+    data class MapPresenceEvent(val atMs: Long, val inMap: Boolean, val reason: String)
+
+    private val _mapPresenceLog = MutableStateFlow<List<MapPresenceEvent>>(emptyList())
+    val mapPresenceLog: StateFlow<List<MapPresenceEvent>> = _mapPresenceLog.asStateFlow()
+
     /**
      * 세션 누적을 전부 0 으로 되돌린다.
      *
@@ -417,7 +423,7 @@ class SessionAggregator(
         // Spv3Open의 맵 진입으로 오인해 타이머가 다시 시작될 수 있다.
         if (mapExitStartRegex.containsMatchIn(line)) {
             awaitingMapArea = false
-            setMapPresence(false)
+            setMapPresence(false, "지역 선택 복귀(InputArea)")
         }
 
         // 가방 스냅샷 시작 → 계산 시작 (게임 응답 배치를 다 기다리지 않고 바로)
@@ -521,7 +527,7 @@ class SessionAggregator(
             if (code.startsWith("LoginScene") || mapNames?.isTown(code) == true) {
                 latestMapCode = null
                 awaitingMapArea = false
-                setMapPresence(false)
+                setMapPresence(false, "MapName=$code")
             } else if (code != latestMapCode && code.isNotEmpty()) {
                 latestMapCode = code
             }
@@ -708,7 +714,7 @@ class SessionAggregator(
     /** 새 맵 시작 — 진행 중이던 회차를 닫아 기록으로 넘기고, "이번 맵" 을 비운다. */
     private fun startNewRun() {
         awaitingMapArea = true
-        setMapPresence(false)
+        setMapPresence(false, "맵 열기(Spv3Open)")
         _state.update {
             it.copy(
                 currentMapElapsedAccumulatedMs = 0,
@@ -724,7 +730,8 @@ class SessionAggregator(
     }
 
     /** 맵 안/밖 전환 시 맵 전용 시계를 확정하거나 재개한다. */
-    private fun setMapPresence(inMap: Boolean) {
+    private fun setMapPresence(inMap: Boolean, reason: String) {
+        val before = _state.value.inMap
         _state.update { state ->
             if (state.inMap == inMap) return@update state
             val now = System.currentTimeMillis()
@@ -738,6 +745,20 @@ class SessionAggregator(
                 currentMapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
             )
         }
+        if (_state.value.inMap != before) recordPresence(inMap, reason)
+    }
+
+    /**
+     * 맵 안/밖 판정이 바뀐 순간을 원인과 함께 남긴다.
+     *
+     * 진단용이다. 이 판정은 서로 다른 로그 신호 네 개가 건드리는데, 실기기에서 무엇이
+     * 언제 왔는지는 원본 로그 마지막 10줄로는 알 수 없다 — 게임을 내리고 앱을 열기까지
+     * 수천 줄이 더 쌓여서 정작 필요한 줄이 밀려난다. 그래서 전환 순간만 따로 붙잡아 둔다.
+     */
+    private fun recordPresence(inMap: Boolean, reason: String) {
+        _mapPresenceLog.value =
+            (_mapPresenceLog.value + MapPresenceEvent(System.currentTimeMillis(), inMap, reason))
+                .takeLast(MAX_PRESENCE_LOG)
     }
 
     /**
@@ -991,13 +1012,16 @@ class SessionAggregator(
         // 처리한다. 기존에는 여기서 즉시 return 해 `inMap=true`가 남아 MAP_ONLY 시간도 계속
         // 누적될 수 있었다.
         if (newArea == null && !awaitingMapArea) {
-            setMapPresence(false)
+            setMapPresence(false, "지역 정보 없는 EnterArea")
             return
         }
         // 게임이 한 번의 맵 진입에도 여러 OnEnterAreaBegin 을 emit 하므로 areaId 로 dedupe.
         // (예: 로딩 단계 → 로딩 완료 → 실제 게임플레이 각각 fire)
         val nowMs = msg.header.timestampEpochMs
 
+        // update 블록은 CAS 재시도로 여러 번 돌 수 있어 안에서 바로 기록하면 중복될 수 있다.
+        // 전환이 있었는지만 표시해 두고 블록 밖에서 한 번 남긴다.
+        enterAreaPresenceReason = null
         _state.update { s ->
             // 일시정지 중에도 맵 밖으로 나갈 수 있다. 이탈 이벤트를 버리면 재생 시
             // 맵 밖 시간이 다시 누적되므로, 지역 전환 자체는 계속 반영한다.
@@ -1039,6 +1063,9 @@ class SessionAggregator(
             // 시계가 그 맵 내내 멈췄다 (`awaitingMapArea` 는 첫 진입에서 이미 소진되므로
             // 두 번째 지역부터는 항상 false 다).
             val stillInMap = enteringOpenedMap || s.inMap
+            if (stillInMap != s.inMap) {
+                enterAreaPresenceReason = "지역 진입(areaId=$newArea)"
+            }
             val clockRuns = stillInMap && s.baselineReady && !s.paused
             s.copy(
                 mapsEntered = s.mapsEntered + 1,
@@ -1055,7 +1082,14 @@ class SessionAggregator(
                 currentMapElapsedSinceMs = if (clockRuns) now else null,
             )
         }
+        enterAreaPresenceReason?.let {
+            recordPresence(_state.value.inMap, it)
+            enterAreaPresenceReason = null
+        }
     }
+
+    /** [handleEnterArea] 의 update 블록에서 블록 밖으로 전환 사유를 넘기는 임시 자리. */
+    private var enterAreaPresenceReason: String? = null
 
     private fun pageIdLabel(pageId: String?): String? = when (pageId) {
         "100" -> "장비 백팩"
@@ -1084,5 +1118,7 @@ class SessionAggregator(
         /** "자산" 탭/HUD 에 보여줄 최대 보유 아이템 종류 수 (가치 내림차순으로 자름). */
         private const val MAX_HOLDINGS = 50
         const val MAX_TIME_SAMPLES = 60   // 1분당 1점 × 60 = 최근 1시간
+        /** 진단용 맵 전환 이력 보관 개수. 맵 한 번에 2~3건 남으니 최근 몇 판은 덮인다. */
+        private const val MAX_PRESENCE_LOG = 40
     }
 }

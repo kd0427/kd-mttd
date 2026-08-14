@@ -979,6 +979,7 @@ private fun AdvancedSection(userService: () -> IUserService?) {
         }
         if (expanded) {
             ProbeCard(userService = userService)
+            MapPresenceCard()
             LogTailCard(userService = userService)
         }
     }
@@ -1029,6 +1030,73 @@ private fun ProbeCard(userService: () -> IUserService?) {
             LabelValue("감지된 게임", installedGames)
             LabelValue("로그 경로", logPath)
             LabelValue("파일 크기", logSize)
+        }
+    }
+}
+
+/**
+ * 맵 안/밖 판정이 바뀐 이력.
+ *
+ * 원본 로그 10줄로는 이걸 못 잡는다 — 게임을 내리고 앱을 열기까지 수천 줄이 더 쌓여서
+ * 정작 필요한 줄이 밀려난다. 전환 순간만 원인과 함께 붙잡아 두면 게임을 내린 뒤에도
+ * "어느 신호가 시계를 멈췄는지" 를 그대로 확인할 수 있다.
+ */
+@Composable
+private fun MapPresenceCard() {
+    val context = LocalContext.current
+    val app = context.applicationContext as TrackerApplication
+    val service by app.trackerService.collectAsStateWithLifecycle()
+    val events by (service?.mapPresenceLog
+        ?: MutableStateFlow(emptyList<com.mttd.domain.SessionAggregator.MapPresenceEvent>()))
+        .collectAsStateWithLifecycle()
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = CardDefaults.outlinedCardBorder(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("맵 전환 기록", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "맵 안/밖 판정이 바뀐 순간과 그 원인입니다. 최신이 위입니다.",
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            HorizontalDivider(color = MttdColors.DividerSoft)
+            if (events.isEmpty()) {
+                Text("(아직 없음)", fontSize = 13.sp, color = MttdColors.TextMuted)
+            } else {
+                val fmt = remember { java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.KOREA) }
+                for (e in events.asReversed()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            fmt.format(java.util.Date(e.atMs)),
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            if (e.inMap) "맵 안" else "맵 밖",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (e.inMap) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error,
+                        )
+                        Text(
+                            e.reason,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
         }
     }
 }

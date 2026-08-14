@@ -115,6 +115,10 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     val sessionState: StateFlow<SessionState>
         get() = aggregator.state
 
+    /** 진단 화면용 — 맵 안/밖 판정이 바뀐 이력. */
+    val mapPresenceLog: StateFlow<List<SessionAggregator.MapPresenceEvent>>
+        get() = aggregator.mapPresenceLog
+
     /** 진단 화면에 보여줄 마지막 원본 로그 10줄. 구독 타이밍과 무관하게 항상 유지한다. */
     private val _recentLines = MutableStateFlow<List<String>>(emptyList())
     val recentLines: StateFlow<List<String>> = _recentLines.asStateFlow()

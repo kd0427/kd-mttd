@@ -118,7 +118,9 @@ class OverlayHost(
                 metricFlow = prefs.miniPanelMetrics,
                 controlFlow = prefs.miniPanelControls,
                 netValueFlow = prefs.miniPanelNetValue,
-                maxPanelWidthPx = (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260)),
+                // 마운트 시점에 한 번 재면 회전 후에도 예전 폭이 남는다. 패널이 화면
+                // 설정이 바뀔 때마다 다시 부를 수 있도록 함수째로 넘긴다.
+                maxPanelWidthPx = { (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260)) },
                 onTogglePause = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.togglePause()
                 },

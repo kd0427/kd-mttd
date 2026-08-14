@@ -113,6 +113,20 @@ enum class BadgeIncomeMetric(val id: String, val label: String, val perHour: Boo
     }
 }
 
+/**
+ * 수치 한 칸의 기본 폭.
+ *
+ * 항목을 몇 개 켜든 이 폭을 유지한다. 예전엔 남는 폭을 항목 수로 나눠 갖게 해서, 세 개만
+ * 켜면 칸이 64dp 까지 벌어지고 여섯 개면 50dp 로 좁아졌다 — 간격 자체는 5dp 로 같은데도
+ * 숫자 사이 여백이 두 배 넘게 차이 나서 같은 패널이 다른 리듬으로 읽혔다.
+ *
+ * 값은 52dp — "12,845.0" 정도의 숫자가 11sp 로 잘리지 않는 선이면서, 412dp 폰에서 여섯 개를
+ * 다 켜도(버튼 없이) 49.7dp 로만 좁아져 세 개일 때와 구분이 안 되는 값이다. 한 줄을 넘길
+ * 때만 [IconOverlay] 의 나눗셈이 이겨서 칸이 균등하게 좁아진다 — 좁은 기기에서 항목·버튼을
+ * 많이 켜면 그만큼 더 좁아지고, 이건 한 줄을 지키기로 한 대가다.
+ */
+private val PREFERRED_METRIC_WIDTH = 52.dp
+
 /** 접힌 상태의 게임 위 미니패널. 탭하면 상세 패널이 열리고, 길게 누르면 위치를 옮긴다. */
 @Composable
 fun IconOverlay(
@@ -121,7 +135,8 @@ fun IconOverlay(
     controlFlow: Flow<Set<String>> = flowOf(MiniPanelControl.DEFAULT_IDS),
     /** true 면 수익을 경매장 세금(1/8) 뺀 실수령으로 보여준다. */
     netValueFlow: Flow<Boolean> = flowOf(false),
-    maxPanelWidthPx: Int? = null,
+    /** 패널 최대 폭(px)을 재는 함수. 값이 아니라 함수인 건 회전 때 다시 재기 위한 것. */
+    maxPanelWidthPx: (() -> Int)? = null,
     onTogglePause: () -> Unit = {},
     onReset: () -> Unit = {},
     onToggleItems: () -> Unit = {},
@@ -171,12 +186,18 @@ fun IconOverlay(
     }
     // 앱 본문의 카드와 똑같이 좌우 20dp 여백을 둔 폭을 최댓값으로만 사용한다.
     // 항목을 빼면 패널은 내용만큼 짧아지고, 길어질 때만 카드 폭에서 멈춘다.
+    //
+    // 화면을 돌리면 가로 폭이 달라지므로 configuration 이 바뀔 때마다 다시 잰다. 그래서
+    // 값이 아니라 재실행할 수 있는 람다를 받는다 — 예전엔 마운트 시점에 한 번 잰 px 를
+    // 그대로 들고 있어서, 세로에서 켠 패널이 가로에서도 세로 폭을 최댓값으로 썼다.
     val density = LocalDensity.current
-    val maxPanelWidth = maxPanelWidthPx?.let { pixels ->
+    val configuration = LocalConfiguration.current
+    val maxPanelWidth = remember(configuration, density) {
         // 서비스 오버레이의 Compose 밀도는 앱 본문과 다를 수 있다.
         // 실제 px를 여기서 dp로 환산해야 카드와 정확히 같은 최대 폭이 된다.
-        with(density) { pixels.toDp() }
-    } ?: (LocalConfiguration.current.screenWidthDp.dp - 40.dp).coerceAtLeast(260.dp)
+        maxPanelWidthPx?.invoke()?.let { pixels -> with(density) { pixels.toDp() } }
+            ?: (configuration.screenWidthDp.dp - 40.dp).coerceAtLeast(260.dp)
+    }
     val selectedControls = remember(selectedControlIds) {
         MiniPanelControl.entries.filter { it.id in selectedControlIds }
     }
@@ -194,9 +215,9 @@ fun IconOverlay(
         gap * (selectedMetrics.size - 1)
     val metricWidth = ((maxPanelWidth - fixedWidth).value / selectedMetrics.size)
         .coerceAtLeast(1f)
-        // 모든 항목을 고르면 카드 최대 폭까지 균등하게 채운다.
-        // 항목이 적을 때만 기본 폭에서 멈춰 패널이 함께 짧아진다.
-        .coerceAtMost(64f)
+        // 평소엔 항목을 몇 개 켜든 이 폭을 그대로 쓴다. 패널은 내용만큼 짧아진다.
+        // 한 줄에 안 들어갈 때만 위 나눗셈이 이겨서 칸이 균등하게 좁아진다.
+        .coerceAtMost(PREFERRED_METRIC_WIDTH.value)
         .dp
     Box(
         modifier = Modifier.wrapContentSize()

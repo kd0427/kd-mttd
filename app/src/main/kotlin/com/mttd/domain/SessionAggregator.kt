@@ -382,7 +382,7 @@ class SessionAggregator(
      *
      * 헤더 종류 별로 분기:
      * - ItemChange: PickItem(s) 이면 payload 에서 ConfigBaseId 추출 → 픽업 카운트
-     * - EnterAreaBegin: mapsEntered 카운트 + LevelId 표시
+     * - EnterAreaBegin: 현재 지역/맵 이름 갱신 (맵핑 횟수는 맵 열기에서 센다)
      */
     fun consume(msg: MessageAssembler.RawMessage) {
         currentLogTime = logClockOf(msg.header.timestampRaw)
@@ -735,9 +735,12 @@ class SessionAggregator(
         if (!wasInMap) recordPresence(false, "맵 열기(Spv3Open)")
         _state.update {
             it.copy(
-                // 맵핑 횟수는 "맵을 몇 번 열었나" 이므로 여기서 센다. 예전엔 EnterArea 에서
-                // 셌는데, 맵 안에서 다른 맵으로 이동하는 이벤트마다 같이 올라갔다.
-                mapsEntered = it.mapsEntered + 1,
+                // 맵핑 횟수는 여기서 센다. 예전엔 EnterArea 에서 셌는데 맵 안에서 지역이
+                // 바뀔 때마다 같이 올라갔다.
+                //
+                // 맵 안에서 연 경우(wasInMap)는 세지 않는다 — 게임은 다른 맵 보스로 이동할
+                // 때도 새 맵 열기(Spv3Open)로 처리하지만, 그건 돌던 판의 연장이라 한 판으로 본다.
+                mapsEntered = if (wasInMap) it.mapsEntered else it.mapsEntered + 1,
                 currentMapElapsedAccumulatedMs = 0,
                 currentMapElapsedSinceMs = null,
             )

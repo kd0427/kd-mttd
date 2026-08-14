@@ -20,6 +20,22 @@ git log --oneline main..upstream/main
 git merge upstream/main
 ```
 
+`upstream`은 **가져오기 전용**이다. 원본에 실수로 push 하는 길을 막으려고 push URL을 가짜 값으로
+바꿔 뒀다 (`git push upstream`이 "repository does not exist"로 실패한다).
+
+```bash
+git remote set-url --push upstream DISABLED_do_not_push_to_upstream
+```
+
+같은 이유로 `gh`의 기본 저장소도 포크로 고정한다. 이 설정이 없으면 remote가 둘이라 `--repo` 없이
+실행한 `gh` 명령이 원본을 향한다.
+
+```bash
+gh repo set-default kd0427/kd-mttd
+```
+
+두 설정 모두 `.git/config`에 있어서 clone 한 곳마다 다시 걸어야 한다.
+
 ## 이 포크의 식별자
 
 | 항목 | 값 |

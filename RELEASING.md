@@ -52,4 +52,4 @@ git push origin v0.3.7-kd
 gh release edit v0.3.7-kd --repo kd0427/kd-mttd --notes-file notes.md
 ```
 
-> `gh`는 이 저장소에서 remote가 둘(`origin`=내 포크, `upstream`=원본)이라 **`--repo kd0427/kd-mttd`를 반드시 붙인다.** 안 붙이면 원본 저장소를 향한다.
+> `gh`는 이 저장소에서 remote가 둘(`origin`=내 포크, `upstream`=원본)이라 **`--repo kd0427/kd-mttd`를 반드시 붙인다.** 안 붙이면 원본 저장소를 향한다. 기본 저장소를 포크로 고정해 두긴 했지만(`gh repo set-default`, `CUSTOMIZATION.md` 참고) 그 설정은 `.git/config`에만 있어서 새로 clone 하면 사라진다.

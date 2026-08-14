@@ -59,6 +59,19 @@ class MapNameLookup(context: Context) {
         return null
     }
 
+    /**
+     * 이 맵 코드가 마을인가.
+     *
+     * `map.json` 이 마을을 `[마을]피난처-엠버의 숨결` 처럼 표기하는 규칙을 그대로 쓴다.
+     * 코드를 소스에 박아두면 시즌마다 마을이 바뀔 때 코드도 같이 고쳐야 하는데, 이렇게 두면
+     * 어차피 시즌마다 갱신하는 `map.json` 만 바꿔도 따라온다.
+     *
+     * 맵 안에서 다른 맵으로 이동하는 이벤트 때문에 `EnterArea` 로는 맵 이탈을 판정할 수 없다
+     * ([com.mttd.domain.SessionAggregator] 참조). 그래서 "마을에 도착했다" 를 직접 봐야 한다.
+     */
+    fun isTown(code: String?): Boolean =
+        resolve(code, null)?.startsWith(TOWN_LABEL_PREFIX) == true
+
     private fun tryMatch(code: String, levelId: String?): String? {
         if (levelId != null) exact["$code#$levelId"]?.let {
             Log.i(TAG, "resolved code=$code levelId=$levelId via exact '#' key -> $it")
@@ -86,5 +99,7 @@ class MapNameLookup(context: Context) {
         private const val TAG = "mTTD.MapNames"
         private const val MAP_ASSET_PATH = "map.json"
         private const val ALIAS_ASSET_PATH = "map_alias.json"
+        /** `map.json` 이 마을을 표시하는 규칙. 새 마을이 생겨도 이 표기만 지키면 코드는 그대로다. */
+        private const val TOWN_LABEL_PREFIX = "[마을]"
     }
 }

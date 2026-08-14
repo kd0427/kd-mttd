@@ -38,13 +38,34 @@ class SessionAggregator(
     )
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
+    /**
+     * 세션 누적을 전부 0 으로 되돌린다.
+     *
+     * **플레이어가 지금 어디 있는지는 지우지 않는다.** 리셋은 "여태 센 걸 버린다" 지
+     * "맵 밖으로 나갔다" 가 아니다. 예전엔 [SessionState] 를 통째로 새로 만들면서 `inMap` 까지
+     * false 로 밀었는데, `inMap` 을 다시 true 로 만들 수 있는 경로가 맵 열기(`Spv3Open`) 하나뿐이라
+     * **맵 안에서 리셋하면 그 맵을 도는 내내 MAP_ONLY 시간이 0 에 멈춰 있었다.**
+     *
+     * `currentAreaId`/`lastEnterAreaMs` 도 같이 들고 간다 — 이걸 비우면 [handleEnterArea] 의
+     * 중복 제거가 뚫려서, 같은 맵의 다음 `EnterArea` 가 새 지역으로 오인되며 `inMap` 을 도로
+     * false 로 덮는다.
+     *
+     * 시계 자체는 `baselineReady = false` 라 멈춰 있고, 가방 스냅샷이 오면
+     * [markBaselineReady] 가 `inMap` 을 보고 알아서 다시 돌린다. 가방 정렬은 맵 안에서도 된다.
+     */
     fun resetSession() {
-        val mode = _state.value.timeTrackingMode
+        val prev = _state.value
         _state.value = SessionState(
             active = true,
             startedAtMs = System.currentTimeMillis(),
             baselineReady = false,   // 다시 가방 정렬 관측할 때까지 계산 대기
-            timeTrackingMode = mode,
+            timeTrackingMode = prev.timeTrackingMode,
+            // 위치 상태 — 누적이 아니라 "지금 상태" 라 유지한다.
+            inMap = prev.inMap,
+            currentAreaId = prev.currentAreaId,
+            currentMapId = prev.currentMapId,
+            currentMapName = prev.currentMapName,
+            lastEnterAreaMs = prev.lastEnterAreaMs,
         )
         slotLastCount.clear()
         slotKeyByPosition.clear()
@@ -54,7 +75,8 @@ class SessionAggregator(
         finishedRuns.clear()
         sessionItemTotals.clear()
         currentRunId = -1
-        currentRunMapName = null
+        // 같은 맵에 그대로 서 있으므로, 리셋 직후 암묵적으로 열리는 회차도 이 맵 이름을 단다.
+        currentRunMapName = prev.currentMapName
         nextRunId = 1
         awaitingMapArea = false
         pausedByExchange = false
@@ -487,12 +509,16 @@ class SessionAggregator(
         // D) 그 외 라인 → 대기 중이던 Update/Add 는 Modfy 가 안 붙었으므로 스냅샷 확정
         flushPendingSlotAsBaseline()
 
-        // E) MapName 추적. LoginScene 은 맵 밖(마을/지역 선택) 복귀 신호라 이전에는
-        // 표시용 코드에서 제외만 했지만, 맵 전용 타이머도 여기서 반드시 멈춰야 한다.
+        // E) MapName 추적. LoginScene(로그인 화면) 과 마을은 맵 밖 복귀 신호라 맵 전용
+        // 타이머를 여기서 멈춘다.
+        //
+        // 마을 판정을 여기서 하는 이유: 맵 안에서 다른 맵 보스로 이동하는 이벤트가 있어서
+        // `EnterArea` 로는 이탈을 판정할 수 없다 ([handleEnterArea] 참조). "어느 맵에 있는지" 를
+        // 직접 보는 MapName 이 이탈 판정에 더 믿을 만하다.
         val m = mapNameRegex.find(line)
         if (m != null) {
             val code = m.groupValues[1]
-            if (code.startsWith("LoginScene")) {
+            if (code.startsWith("LoginScene") || mapNames?.isTown(code) == true) {
                 latestMapCode = null
                 awaitingMapArea = false
                 setMapPresence(false)
@@ -730,16 +756,6 @@ class SessionAggregator(
             while (finishedRuns.size > MAX_RUNS) finishedRuns.removeAt(0)
         }
         currentRunId = -1
-    }
-
-    /** 서비스 재시작 시 디스크에 있던 회차 요약을 복원. */
-    fun restoreRuns(summaries: List<MapRun>, sessionItems: List<PickupSummary>) {
-        finishedRuns.clear()
-        finishedRuns += summaries
-        nextRunId = (summaries.maxOfOrNull { it.id } ?: 0L) + 1
-        sessionItemTotals.clear()
-        for (p in sessionItems) p.itemId?.let { sessionItemTotals[it] = p }
-        publishRuns()
     }
 
     /** 아직 회차가 시작되지 않았으면(맵 열기 전 획득) 암묵적으로 하나 연다. */
@@ -1015,6 +1031,15 @@ class SessionAggregator(
             val now = System.currentTimeMillis()
             val mapChunk = s.mapElapsedSinceMs?.let { since -> now - since } ?: 0
             val currentMapChunk = s.currentMapElapsedSinceMs?.let { since -> now - since } ?: 0
+            // EnterArea 는 맵 **진입**만 알린다. 이탈은 InputArea(지역 선택 복귀) ·
+            // MapName 의 마을/LoginScene · areaId 없는 EnterArea 가 판정한다.
+            //
+            // 예전엔 여기서 `inMap = enteringOpenedMap` 으로 덮어써서, 맵 안에서 다른 맵
+            // 보스로 이동하는 이벤트처럼 Spv3Open 없이 지역만 바뀌면 맵을 나간 것으로 오인해
+            // 시계가 그 맵 내내 멈췄다 (`awaitingMapArea` 는 첫 진입에서 이미 소진되므로
+            // 두 번째 지역부터는 항상 false 다).
+            val stillInMap = enteringOpenedMap || s.inMap
+            val clockRuns = stillInMap && s.baselineReady && !s.paused
             s.copy(
                 mapsEntered = s.mapsEntered + 1,
                 mapsCompleted = completed,
@@ -1022,11 +1047,12 @@ class SessionAggregator(
                 currentMapId = levelId,
                 currentMapName = displayName,
                 lastEnterAreaMs = nowMs,
-                inMap = enteringOpenedMap,
+                inMap = stillInMap,
+                // 이미 돌고 있던 구간은 mapChunk 로 누적에 합쳐진 뒤 다시 시작하므로 손실이 없다.
                 mapElapsedAccumulatedMs = s.mapElapsedAccumulatedMs + mapChunk,
-                mapElapsedSinceMs = if (enteringOpenedMap && s.baselineReady && !s.paused) now else null,
+                mapElapsedSinceMs = if (clockRuns) now else null,
                 currentMapElapsedAccumulatedMs = s.currentMapElapsedAccumulatedMs + currentMapChunk,
-                currentMapElapsedSinceMs = if (enteringOpenedMap && s.baselineReady && !s.paused) now else null,
+                currentMapElapsedSinceMs = if (clockRuns) now else null,
             )
         }
     }

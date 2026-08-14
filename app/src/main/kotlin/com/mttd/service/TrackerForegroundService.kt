@@ -182,22 +182,29 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         TrackerApplication.instance.setTrackerService(this)
         startPriceRefreshLoop()
         checkForUpdateOnce()
-        restoreRunsFromDisk()
+        clearStoredRuns()
     }
 
     /**
-     * 프로세스가 죽었다 살아난 경우(START_STICKY 재시작, 앱 업데이트 등) 회차를 되살린다.
+     * 서비스가 새로 뜨면 이전 세션의 회차를 버리고 처음부터 시작한다.
      *
-     * 아이템 목록은 평소 메모리에 없으므로, 세션 전체 아이템 합계는 여기서 **한 번만**
-     * 디스크에서 읽어 재구성한다.
+     * 예전에는 디스크에서 회차를 복원했는데, **수익만 살아나고 시간은 0 부터 시작**해서
+     * 시간당 수익이 터무니없이 커졌다 (복원된 총수익 ÷ 방금 시작한 시간). 수익과 시간은
+     * 짝이라 한쪽만 복원할 수 없고, 시간까지 저장하려면 회차마다 누적값을 따로 남겨야 한다.
+     * 세션을 새로 시작하면 둘이 항상 맞는다.
+     *
+     * 지우지 않고 남겨두면 더 나쁘다 — `nextRunId` 가 1 부터 다시 시작하는데 디스크에는
+     * 같은 id 가 남아 있어서 새 회차 저장이 PRIMARY KEY 충돌로 **조용히 실패**하고
+     * ([com.mttd.data.runs.RunRepository.save] 가 예외를 삼킨다), 상세 팝업은 엉뚱한
+     * 옛 회차의 아이템을 보여준다.
+     *
+     * 서비스가 죽는 경우: 최근 앱에서 밀기(`stopWithTask=true`), 앱 업데이트, 설정의
+     * "앱 종료", 시스템 메모리 회수.
      */
-    private fun restoreRunsFromDisk() {
+    private fun clearStoredRuns() {
         lifecycleScope.launch {
-            val summaries = runRepo.loadSummaries()
-            if (summaries.isEmpty()) return@launch
-            val merged = runRepo.loadMergedItems()
-            aggregator.restoreRuns(summaries, merged)
-            Log.i(TAG, "restored ${summaries.size} runs from disk (${merged.size} item types)")
+            runRepo.clear()
+            Log.i(TAG, "cleared stored runs — starting a fresh session")
         }
     }
 

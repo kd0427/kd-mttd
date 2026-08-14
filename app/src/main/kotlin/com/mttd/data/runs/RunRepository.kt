@@ -73,52 +73,6 @@ class RunRepository(context: Context, private val itemInfo: ItemInfoLookup) {
         )
     }
 
-    /** 앱/서비스 재시작 후 그래프 복원용 요약. 아이템 목록은 비어 있다. */
-    suspend fun loadSummaries(): List<MapRun> = try {
-        dao.summaries(MAX_STORED_RUNS).map {
-            MapRun(
-                id = it.id,
-                index = 0,
-                startedAtMs = it.startedAtMs,
-                endedAtMs = it.endedAtMs,
-                mapName = it.mapName,
-                items = emptyList(),
-                storedTotalValue = it.totalValue,
-                storedNetTotalValue = it.netTotalValue,
-                storedPickupCount = it.pickupCount,
-                storedItemCount = it.itemCount,
-            )
-        }
-    } catch (t: Throwable) {
-        Log.w(TAG, "loadSummaries failed", t)
-        emptyList()
-    }
-
-    /**
-     * 저장된 모든 회차의 아이템을 itemId 기준으로 합산.
-     * 세션 전체 아이템 합계를 복원할 때 **시작 시 한 번만** 쓴다.
-     */
-    suspend fun loadMergedItems(): List<PickupSummary> = try {
-        val acc = LinkedHashMap<String, PickupSummary>()
-        for (row in dao.summaries(MAX_STORED_RUNS)) {
-            for (p in loadItems(row.id)) {
-                val id = p.itemId ?: continue
-                val prev = acc[id]
-                acc[id] = if (prev == null) p
-                          else prev.copy(
-                              quantity = prev.quantity + p.quantity,
-                              value = prev.value + p.value,
-                              netValue = prev.netValue + p.netValue,
-                              unitPrice = p.unitPrice.takeIf { it > 0f } ?: prev.unitPrice,
-                          )
-            }
-        }
-        acc.values.toList()
-    } catch (t: Throwable) {
-        Log.w(TAG, "loadMergedItems failed", t)
-        emptyList()
-    }
-
     suspend fun delete(runId: Long) {
         try { dao.delete(runId) } catch (t: Throwable) { Log.w(TAG, "delete $runId failed", t) }
     }

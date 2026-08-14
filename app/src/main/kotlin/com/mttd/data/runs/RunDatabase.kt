@@ -52,15 +52,6 @@ interface RunDao {
     @Query("SELECT * FROM map_run WHERE id = :id")
     suspend fun findById(id: Long): RunEntity?
 
-    /**
-     * 앱 재시작 시 요약 복원용. `items_json` 은 제외해서 메모리에 안 올린다.
-     */
-    @Query(
-        "SELECT id, started_at, ended_at, map_name, total_value, net_total_value, pickup_count, item_count " +
-            "FROM map_run ORDER BY started_at ASC LIMIT :limit"
-    )
-    suspend fun summaries(limit: Int): List<RunSummaryRow>
-
     /** 보관 한도를 넘긴 오래된 회차 정리. */
     @Query("DELETE FROM map_run WHERE id NOT IN (SELECT id FROM map_run ORDER BY started_at DESC LIMIT :keep)")
     suspend fun trimTo(keep: Int)
@@ -68,18 +59,6 @@ interface RunDao {
     @Query("SELECT COUNT(*) FROM map_run")
     suspend fun count(): Int
 }
-
-/** `items_json` 없는 경량 행. 그래프/합계에 필요한 값만. */
-data class RunSummaryRow(
-    val id: Long,
-    @ColumnInfo(name = "started_at") val startedAtMs: Long,
-    @ColumnInfo(name = "ended_at") val endedAtMs: Long?,
-    @ColumnInfo(name = "map_name") val mapName: String?,
-    @ColumnInfo(name = "total_value") val totalValue: Double,
-    @ColumnInfo(name = "net_total_value") val netTotalValue: Double,
-    @ColumnInfo(name = "pickup_count") val pickupCount: Int,
-    @ColumnInfo(name = "item_count") val itemCount: Int,
-)
 
 @Database(entities = [RunEntity::class], version = 2, exportSchema = false)
 abstract class RunDatabase : RoomDatabase() {

@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -120,6 +121,8 @@ fun HudOverlay(
     onTogglePause: () -> Unit = {},
     onRefreshHoldings: () -> Unit = {},
     onReset: () -> Unit = {},
+    /** mTTD 자체를 종료한다. 되돌릴 수 없으므로 길게 눌러야 실행된다. */
+    onExitApp: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
     val prices = priceState?.collectAsStateWithLifecycle()?.value
@@ -193,6 +196,11 @@ fun HudOverlay(
                     // 초기화는 1초간 길게 눌러야 실행된다.
                     HudLongPressIconButton(Icons.Filled.Refresh, onReset)
                 }
+                Spacer(Modifier.width(3.dp))
+                // 종료는 세션을 통째로 버리므로(서비스가 죽으면 새 세션으로 시작한다)
+                // 리셋과 같은 1 초 길게 누르기로 둔다. 실수로 스치면 안 된다.
+                HudLongPressIconButton(Icons.AutoMirrored.Filled.Logout, onExitApp)
+
                 Spacer(Modifier.width(3.dp))
                 HudMaterialIconButton(Icons.Filled.Close, onCollapse)
             }

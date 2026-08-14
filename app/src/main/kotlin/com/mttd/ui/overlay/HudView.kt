@@ -3,7 +3,6 @@ package com.mttd.ui.overlay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,14 +37,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -57,7 +54,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.mttd.domain.models.SessionState
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 
 /** 목록에 한 번에 보일 줄 수. 이보다 많으면 목록 안에서 스크롤. */
@@ -120,7 +116,7 @@ fun HudOverlay(
     onTogglePause: () -> Unit = {},
     onRefreshHoldings: () -> Unit = {},
     onReset: () -> Unit = {},
-    /** mTTD 자체를 종료한다. 되돌릴 수 없으므로 두 번 탭해야 실행된다. */
+    /** mTTD 자체를 종료한다. 되돌릴 수 없다 — 한 번 탭으로 바로 실행된다. */
     onExitApp: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
@@ -156,7 +152,7 @@ fun HudOverlay(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            // 제목/빈 헤더 영역을 누르면 다시 요약 바로 접힌다. 헤더 안의 제어 버튼은
+            // 헤더의 빈 영역을 누르면 다시 요약 바로 접힌다. 헤더 안의 제어 버튼은
             // 각자 클릭 처리를 유지한다.
             //
             // 접기 전용 ✕ 버튼은 뺐다 — 바로 옆 종료(🚪)와 나란히 있으면 둘 다 "닫기" 로
@@ -168,8 +164,6 @@ fun HudOverlay(
                     .clickable(onClick = onCollapse),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("고인물 mTTD", color = Color(0xFFFB923C), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Spacer(Modifier.width(6.dp))
                 val statusText = when {
                     session.paused -> "● 중지중"
                     !session.baselineReady -> "● 로그·가방"
@@ -184,8 +178,10 @@ fun HudOverlay(
                 }
                 Text(statusText, color = statusColor, fontSize = 10.sp)
                 Spacer(Modifier.fillMaxWidth().weight(1f))
+                // 버튼 사이 간격은 12dp — 24dp 버튼 사이에 그만큼의 무반응 구간을 둬서
+                // 옆 버튼 오터치를 막는다. 제목을 뺀 자리가 이 여백으로 갔다.
                 HudMaterialIconButton(Icons.Filled.Settings, onOpenSettings)
-                Spacer(Modifier.width(3.dp))
+                Spacer(Modifier.width(12.dp))
                 if (session.inExchange) {
                     // 거래소 안에서는 pause 가 자동 제어라 수동 토글 버튼이 필요 없고,
                     // 새로고침은 리셋이 아니라 보유 아이템 가치 재계산이어야 한다.
@@ -195,14 +191,11 @@ fun HudOverlay(
                         if (session.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                         onTogglePause,
                     )
-                    Spacer(Modifier.width(3.dp))
-                    // 초기화는 1초간 길게 눌러야 실행된다.
-                    HudLongPressIconButton(Icons.Filled.Refresh, onReset)
+                    Spacer(Modifier.width(12.dp))
+                    HudDangerIconButton(Icons.Filled.Refresh, "초기화", onReset)
                 }
-                Spacer(Modifier.width(3.dp))
-                // 종료는 세션을 통째로 버리므로(앱이 꺼지고, 다시 켜면 새 세션이다)
-                // 한 번 탭으로는 안 되게 두 번 탭으로 둔다. 실수로 스치면 안 된다.
-                HudDoubleTapIconButton(Icons.AutoMirrored.Filled.Logout, onExitApp)
+                Spacer(Modifier.width(12.dp))
+                HudDangerIconButton(Icons.AutoMirrored.Filled.Logout, "mTTD 종료", onExitApp)
 
 
             }
@@ -478,62 +471,35 @@ internal fun formatFire(v: Double): String {
         else -> "%,.0f".format(v)
     }
 }
-/** 실수 방지를 위해 1초 롱프레스에서만 초기화하는 아이콘 버튼. */
+/**
+ * 되돌릴 수 없는 동작(초기화·종료)용 버튼. 한 번 탭으로 바로 실행된다.
+ *
+ * 실행 시 진동을 준다 — 오터치로 눌렸을 때 사용자가 알아채는 유일한 신호다.
+ * 빨간 tint 도 같은 이유로 유지한다: 거래소 모드의 새로고침(무해)과 초기화(세션 폐기)는
+ * 아이콘이 같아서, 색이 둘을 구분하는 유일한 단서다.
+ */
 @Composable
-private fun HudLongPressIconButton(icon: ImageVector, onLongClick: () -> Unit) {
-    val scope = rememberCoroutineScope()
+private fun HudDangerIconButton(icon: ImageVector, description: String, onClick: () -> Unit) {
     val haptics = LocalHapticFeedback.current
+    val interactionSource = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .size(24.dp)
-            .pointerInput(onLongClick) {
-                detectTapGestures(
-                    onPress = {
-                        val armed = scope.launch {
-                            delay(LONG_PRESS_MS)
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onLongClick()
-                        }
-                        tryAwaitRelease()
-                        armed.cancel()
-                    },
-                )
-            },
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                },
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = "1초 길게 눌러 초기화",
+            contentDescription = description,
             tint = Color(0xFFF87171),
             modifier = Modifier.size(16.dp),
         )
     }
 }
-
-/** 실수 방지를 위해 두 번 탭해야만 실행되는 아이콘 버튼 (한 번 탭은 아무 일도 하지 않는다). */
-@Composable
-private fun HudDoubleTapIconButton(icon: ImageVector, onDoubleTap: () -> Unit) {
-    val haptics = LocalHapticFeedback.current
-    Box(
-        modifier = Modifier
-            .size(24.dp)
-            .pointerInput(onDoubleTap) {
-                detectTapGestures(
-                    onDoubleTap = {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onDoubleTap()
-                    },
-                )
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = "두 번 탭해서 mTTD 종료",
-            tint = Color(0xFFF87171),
-            modifier = Modifier.size(16.dp),
-        )
-    }
-}
-
-private const val LONG_PRESS_MS = 1_000L

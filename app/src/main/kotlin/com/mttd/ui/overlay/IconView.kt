@@ -265,6 +265,11 @@ private fun SummaryMetric(label: String, value: String, color: Color, width: and
     }
 }
 
+/**
+ * 초기화는 여기서만 더블탭이다. 일반패널은 버튼 사이를 12dp 로 벌려서 한 번 탭으로 내렸지만,
+ * 미니패널은 그럴 폭이 없어 버튼끼리 붙어 있다 — 제스처가 유일한 오터치 방어선이다.
+ * 두 패널을 통일하려다 이걸 한 번 탭으로 바꾸면 세션이 스치기만 해도 날아간다.
+ */
 @Composable
 private fun SummaryResetButton(onReset: () -> Unit) {
     Box(

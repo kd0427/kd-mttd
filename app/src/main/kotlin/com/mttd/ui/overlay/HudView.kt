@@ -200,23 +200,23 @@ fun HudOverlay(
                     else -> Color(0xFF4ADE80)
                 }
                 Text(statusText, color = statusColor, fontSize = 10.sp, maxLines = 1)
-                Spacer(Modifier.width(5.dp))
+                Spacer(Modifier.width(6.dp))
                 // 화면 전환 탭. 스와이프만 두면 제스처가 눈에 안 보여서 화면이 둘이라는 것
                 // 자체를 모른다 — 점 두 개(●○)로 표시해 봤지만 무슨 뜻인지 읽히지 않았다.
                 HudPageTabs(page = page, onSelect = { page = it })
                 Spacer(Modifier.fillMaxWidth().weight(1f))
-                // 버튼 사이 간격은 20dp — 24dp 버튼 사이에 그만큼의 무반응 구간을 둬서
-                // 옆 버튼 오터치를 막는다. 제목을 뺀 자리가 이 여백으로 갔다.
+                // 버튼 사이 간격은 16dp — 24dp 버튼 사이에 그만큼의 무반응 구간을 둬서
+                // 옆 버튼 오터치를 막는다.
                 //
-                // 폭 예산이 빡빡하다. 패널 280dp - 좌우 여백 20dp = 260dp 안에
+                // 폭 예산. 패널 280dp - 좌우 여백 20dp = 260dp 안에
                 //   가장 긴 상태 문구("● 로그·가방", 10sp 로 약 58dp)
-                // + 여백 5dp + 전환 탭(8sp 두 개 + 사이 5dp, 약 37dp)
-                // + 버튼 4 개(96dp) + 간격 셋(60dp) = 약 256dp
-                // 를 넣고 있어서 남는 폭이 4dp 뿐이다. 전환 탭에 알약 배경·패딩을 주면 이걸
-                // 넘긴다(그래서 글자만 남겼다). 여기에 뭘 더 넣거나 간격을 더 벌리려면
-                // 기기에서 상태 문구가 잘리지 않는지 반드시 확인할 것.
+                // + 여백 6dp + 전환 탭(9.5sp 두 개 + 사이 7dp, 약 45dp)
+                // + 버튼 4 개(96dp) + 간격 셋(48dp) = 약 253dp
+                // 를 넣어 7dp 가 남는다. 전환 탭을 읽히는 크기로 키우면서 확보한 폭이라,
+                // 간격을 20dp 로 되돌리면 상태 문구가 밀린다. 여기에 뭘 더 넣으려면 기기에서
+                // 상태 문구가 잘리지 않는지 반드시 확인할 것.
                 HudMaterialIconButton(Icons.Filled.Settings, onOpenSettings)
-                Spacer(Modifier.width(20.dp))
+                Spacer(Modifier.width(16.dp))
                 // 일시정지는 거래소 여부로, 새로고침/초기화는 보고 있는 화면으로 가른다.
                 // 둘을 묶어두면 거래소 밖에서 "가치" 로 쓸어 넘겼을 때 초기화 버튼이 뜬다 —
                 // 보유 가치를 보면서 누르는 새로고침은 재계산이어야지 세션 폐기면 안 된다.
@@ -226,14 +226,14 @@ fun HudOverlay(
                         if (session.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                         onTogglePause,
                     )
-                    Spacer(Modifier.width(20.dp))
+                    Spacer(Modifier.width(16.dp))
                 }
                 if (page == 1) {
                     HudMaterialIconButton(Icons.Filled.Refresh, onRefreshHoldings)
                 } else {
                     HudDangerIconButton(Icons.Filled.Refresh, "초기화", onReset)
                 }
-                Spacer(Modifier.width(20.dp))
+                Spacer(Modifier.width(16.dp))
                 HudDangerIconButton(Icons.AutoMirrored.Filled.Logout, "mTTD 종료", onExitApp)
 
 
@@ -468,7 +468,7 @@ private fun PickupRow(p: com.mttd.domain.models.PickupSummary) {
 @Composable
 private fun HudPageTabs(page: Int, onSelect: (Int) -> Unit) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         HudPageTab("수익", selected = page == 0) { onSelect(0) }
@@ -482,7 +482,7 @@ private fun HudPageTab(label: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         label,
         color = if (selected) Color(0xFF93C5FD) else Color(0xFF64748B),
-        fontSize = 8.sp,
+        fontSize = 9.5.sp,
         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         maxLines = 1,
         modifier = Modifier.clickable(

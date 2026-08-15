@@ -201,9 +201,9 @@ private fun PreviewHudExchange() = OnGame {
     )
 }
 
-// 페이지 점(●○)이 붙어 헤더가 가장 빡빡해지는 조합이다 — 거래소 밖(일시정지 버튼 있음)
-// + 가장 긴 상태 문구. 여기서 안 눌리면 다른 조합은 다 여유가 있다. 스와이프로 "가치"
-// 화면에 온 상태는 프리뷰로 만들 수 없다(내부 state 라) — 기기에서 봐야 한다.
+// 헤더가 가장 빡빡해지는 조합이다 — 거래소 밖(일시정지 버튼 있음) + 가장 긴 상태 문구.
+// 여기서 안 눌리면 다른 조합은 다 여유가 있다. "가치" 탭을 눌러서 넘어간 상태는 프리뷰로
+// 만들 수 없다(내부 state 라) — 기기에서 봐야 한다.
 @Preview(name = "상세 패널 · 헤더 최대 폭", widthDp = 320, showBackground = true)
 @Composable
 private fun PreviewHudTightHeader() = OnGame {

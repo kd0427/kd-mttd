@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,7 +49,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -170,22 +171,23 @@ fun HudOverlay(
     val session by sessionState.collectAsStateWithLifecycle()
     val prices = priceState?.collectAsStateWithLifecycle()?.value
 
-    // 0 = 수익 화면, 1 = 보유 아이템(가치) 화면. 거래소를 드나들 때는 지금까지처럼 자동으로
-    // 맞는 화면이 뜨고, 그 사이에는 좌우로 쓸어서 수동으로도 넘길 수 있다 — 거래소 밖에서
-    // 가방 가치를 확인할 길이 없던 것을 메운다.
+    // 0 = 수익 화면, 1 = 보유 아이템(가치) 화면. 거래소를 드나들 때는 자동으로 맞는 화면이
+    // 뜨고, 그 사이에는 헤더의 수익/가치 탭으로 넘긴다.
+    //
+    // 좌우 스와이프도 있었는데 뺐다. 탭이 생긴 뒤로는 쓸 일이 없는데(눈에 보이는 쪽을 누르게
+    // 된다), 본문의 다른 제스처(창-이동 롱프레스, 수치 영역 탭)와 같은 포인터를 두고 겨루는
+    // 비용만 남았다.
     var page by remember { mutableStateOf(if (session.inExchange) 1 else 0) }
     LaunchedEffect(session.inExchange) {
         page = if (session.inExchange) 1 else 0
     }
     // 가치 화면으로 넘어올 때마다 보유 아이템을 다시 계산한다. 예전엔 거래소 진입
     // (SessionAggregator.enterExchange) 만 계산을 걸어서, 거래소를 한 번도 안 들렀으면
-    // 탭이나 스와이프로 "가치" 를 열어도 목록이 비어 있었다.
+    // 탭으로 "가치" 를 열어도 목록이 비어 있었다.
     // 슬롯 수량(slotLastCount)은 거래소 밖에서도 계속 최신이라 언제 불러도 안전하다.
     LaunchedEffect(page) {
         if (page == 1) onRefreshHoldings()
     }
-    val density = LocalDensity.current
-    val swipeThresholdPx = remember(density) { with(density) { 40.dp.toPx() } }
     // 창-이동 롱프레스를 인식했을 때의 진동. 예전 View 기반 드래그(attachDragBehavior)가
     // 주던 피드백이라, Compose 로 옮기면서 같이 가져온다.
     val dragHaptics = LocalHapticFeedback.current
@@ -272,7 +274,7 @@ fun HudOverlay(
                 HudMaterialIconButton(Icons.Filled.Settings, onOpenSettings)
                 Spacer(Modifier.width(16.dp))
                 // 일시정지는 거래소 여부로, 새로고침/초기화는 보고 있는 화면으로 가른다.
-                // 둘을 묶어두면 거래소 밖에서 "가치" 로 쓸어 넘겼을 때 초기화 버튼이 뜬다 —
+                // 둘을 묶어두면 거래소 밖에서 "가치" 로 넘겼을 때 초기화 버튼이 뜬다 —
                 // 보유 가치를 보면서 누르는 새로고침은 재계산이어야지 세션 폐기면 안 된다.
                 if (!session.inExchange) {
                     // 거래소 안에서는 pause 가 자동 제어라 수동 토글 버튼이 필요 없다.
@@ -296,31 +298,17 @@ fun HudOverlay(
 
             }
 
-            // 스와이프(화면 전환)와 창-이동(길게 눌러 드래그)은 헤더를 뺀 이 본문 영역에만
-            // 건다. 헤더는 탭하면 접히는 영역이라(위 Row 의 clickable), 같은 자리에 롱프레스
-            // 드래그를 얹으면 접기와 창-이동이 같은 포인터 스트림을 두고 겨루게 된다.
+            // 창-이동(길게 눌러 드래그)은 헤더를 뺀 이 본문 영역에만 건다. 헤더는 탭하면
+            // 접히는 영역이라(위 Row 의 clickable), 같은 자리에 롱프레스 드래그를 얹으면
+            // 접기와 창-이동이 같은 포인터 스트림을 두고 겨루게 된다.
             //
-            // 창-이동은 예전엔 OverlayHost 가 View.setOnTouchListener 로 처리했는데, 스와이프
-            // pointerInput 이 카드를 덮으면 Compose 가 터치 DOWN 을 먼저 가져가 버려서 View
-            // 리스너가 이벤트를 아예 못 받는다(펼친 HUD 가 안 움직이는 버그). 두 제스처를 같은
-            // pointerInput 파이프라인에 순서대로 두면, 앞쪽이 소비했을 때 뒤쪽이 알아서 물러난다.
+            // 창-이동은 예전엔 OverlayHost 가 View.setOnTouchListener 로 처리했는데, 본문을
+            // 덮는 pointerInput 이 있으면 Compose 가 터치 DOWN 을 먼저 가져가 버려서 View
+            // 리스너가 이벤트를 아예 못 받는다(펼친 HUD 가 안 움직이는 버그). 그래서 창-이동도
+            // Compose 쪽에서 처리한다.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .pointerInput(Unit) {
-                        var dragTotal = 0f
-                        detectHorizontalDragGestures(
-                            onDragStart = { dragTotal = 0f },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                dragTotal += dragAmount
-                            },
-                            onDragEnd = {
-                                if (dragTotal <= -swipeThresholdPx) page = 1
-                                else if (dragTotal >= swipeThresholdPx) page = 0
-                            },
-                        )
-                    }
                     .pointerInput(onDragStart, onDragBy, onDragEnd) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = {
@@ -341,6 +329,38 @@ fun HudOverlay(
             if (page == 1) {
                 HoldingsBody(session.holdings, scrollEnabled = !windowDragging)
             } else {
+                // 수치 영역(경과·총 수익·시간당·맵 진입·이번 맵)을 탭하면 접힌다.
+                //
+                // 헤더 탭만으로는 접을 곳이 얇아서, 패널 대부분을 차지하는 이 영역에도 같은
+                // 동작을 준다. 아래 획득 목록은 제외한다 — 거기는 스크롤 영역이라 탭과
+                // 스크롤이 겹친다.
+                //
+                // detectTapGestures 를 쓰면 안 된다. onLongPress 를 주면 롱프레스가 성립한 뒤
+                // consumeUntilUp() 으로 손 뗄 때까지 전부 소비해 버려서(foundation 1.7.2 소스
+                // 확인), 조상의 창-이동 드래그가 첫 이동에서 취소된다 — 햅틱만 울리고 창이 안
+                // 따라오는 회귀다. 반대로 onLongPress 를 빼면 꾹 눌렀다 뗀 것까지 탭이 된다.
+                //
+                // 그래서 직접 쓴다. 아무것도 consume 하지 않으므로 조상 제스처를 방해하지 않는다.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .pointerInput(onCollapse) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                // 길게 누르면(창-이동) null, 다른 제스처가 소비해도 null.
+                                val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                    waitForUpOrCancellation()
+                                }
+                                // 뗀 자리가 누른 자리에서 슬롭 이상 벗어났으면 탭이 아니다 —
+                                // 목록을 스크롤하려다 여기서 시작한 플릭이나, 예전 좌우 스와이프
+                                // 습관대로 문지른 것이 접기로 새지 않게 한다.
+                                val moved = up != null &&
+                                    (up.position - down.position).getDistance() > viewConfiguration.touchSlop
+                                if (up != null && !moved) onCollapse()
+                            }
+                        },
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
                 when {
                     prices != null && prices.loading -> Text(
                         "💰 시세 정보 업데이트 중...",
@@ -392,6 +412,7 @@ fun HudOverlay(
                         fontFamily = FontFamily.Monospace,
                     )
                 }
+                }   // 탭하면 접히는 수치 영역 끝 — 아래 획득 목록은 포함하지 않는다.
                 if (session.recentPickups.isEmpty()) {
                     Text("(없음)", color = Color(0xFF94A3B8), fontSize = 10.sp)
                 } else {
@@ -519,7 +540,8 @@ private fun PickupRow(p: com.mttd.domain.models.PickupSummary) {
 }
 
 /**
- * "수익" / "가치" 화면 전환 탭. 좌우 스와이프와 같은 동작을 눌러서도 할 수 있게 한다.
+ * "수익" / "가치" 화면 전환 탭. 화면이 둘이라는 것 자체를 눈에 보이게 한다 — 예전에 있던
+ * 좌우 스와이프는 이 탭이 생긴 뒤 쓸 일이 없어져 뺐다.
  *
  * 헤더 안 상태 문구 옆에 얹으므로 알약 배경도 패딩도 없다 — 폭 예산이 4dp 밖에 안 남아서
  * (헤더 Row 의 주석 참조) 배경을 주면 버튼이 밀린다. 현재 화면은 색과 굵기로만 구분한다.

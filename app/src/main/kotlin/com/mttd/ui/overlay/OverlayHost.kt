@@ -197,7 +197,7 @@ class OverlayHost(
                     com.mttd.TrackerApplication.instance.trackerService.value?.resetSession()
                 },
                 // 창-이동은 View.setOnTouchListener 가 아니라 Compose 쪽 pointerInput 에서
-                // 처리한다. 본문을 덮는 스와이프 제스처가 터치 DOWN 을 먼저 가져가면 View
+                // 처리한다. 본문을 덮는 Compose 제스처가 터치 DOWN 을 먼저 가져가면 View
                 // 리스너는 이벤트를 아예 못 받는다 — HudView.kt 의 관련 주석 참조.
                 onDragStart = {
                     hudDragAnchorX = hudParams.x.toFloat()

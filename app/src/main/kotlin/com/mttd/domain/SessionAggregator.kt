@@ -563,10 +563,20 @@ class SessionAggregator(
                 setMapPresence(false, "MapName=$code")
             } else if (code != latestMapCode && code.isNotEmpty()) {
                 latestMapCode = code
-                // 맵 밖인데 맵 이름이 관측됐다 = 재입장 후보 신호. 지금은 이름만 기억하고
-                // 시계는 안 켜는데, "재입장 시 무엇이 오는가" 를 알아야 그게 맞는지 판단할 수
-                // 있어서 진단 기록에 남긴다.
-                if (!_state.value.inMap) recordPresence(false, "맵 이름 관측 — 맵 밖 유지(MapName=$code)")
+                // 맵 밖인데 맵(마을·로그인이 아닌) 이름이 관측됐다 = 맵으로 들어가는 중이다.
+                //
+                // 게임은 **이미 열어둔 맵에 다시 들어갈 때 `Spv3Open` 을 보내지 않는다**
+                // (실기기 확인 2026-08-16: 마을→맵→마을→같은 맵 순서에서 재입장 때는
+                // MapName 과 EnterArea 만 온다). 맵 열기가 세우던 "지역 진입 대기" 플래그를
+                // 여기서도 세워서, 뒤따라오는 EnterArea 가 시계를 켜게 한다.
+                //
+                // 이름만으로 켜지는 않는다 — areaId 를 실은 EnterArea 가 와야 한다. 마을·로그인
+                // 이름은 위 분기에서 이미 걸러졌고, 그 외 미지의 씬 이름이 섞여 들어와도
+                // 뒤따르는 지역 진입이 없으면 아무 일도 일어나지 않는다.
+                if (!_state.value.inMap) {
+                    awaitingMapArea = true
+                    recordPresence(false, "맵 이름 관측 — 지역 진입 대기(MapName=$code)")
+                }
             }
         }
     }
@@ -793,6 +803,11 @@ class SessionAggregator(
             val currentMapChunk = state.currentMapElapsedSinceMs?.let { (now - it).coerceAtLeast(0) } ?: 0
             state.copy(
                 inMap = inMap,
+                // 맵을 나가면 지역 기억도 비운다. 안 비우면 같은 맵에 다시 들어올 때 오는
+                // EnterArea 가 "같은 areaId" 중복 방지에 걸려 통째로 삼켜진다 (실기기에서
+                // 재입장 시 areaId 가 그대로였다). 중복 방지는 한 번의 입장에서 게임이 여러 번
+                // emit 하는 것을 거르려는 것이지, 나갔다 들어온 것까지 거르려는 게 아니다.
+                currentAreaId = if (inMap) state.currentAreaId else null,
                 mapElapsedAccumulatedMs = state.mapElapsedAccumulatedMs + chunk,
                 mapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
                 currentMapElapsedAccumulatedMs = state.currentMapElapsedAccumulatedMs + currentMapChunk,
@@ -1101,8 +1116,10 @@ class SessionAggregator(
                 return@update s
             }
 
-            // 같은 areaId 없이 매우 짧은 간격(3초 이하) 안에 두 번 오면 게임의 중복 emit 로 간주
-            if (prevArea == null && lastEnterMs > 0 && nowMs - lastEnterMs < 3000) {
+            // 같은 areaId 없이 매우 짧은 간격(3초 이하) 안에 두 번 오면 게임의 중복 emit 로 간주.
+            // 단, 맵으로 들어가는 중(맵 열기 또는 맵 이름 관측)이면 그건 진짜 진입이다 — 맵을
+            // 나갈 때 currentAreaId 를 비우므로 여기서 prevArea 가 null 인 것은 정상이다.
+            if (prevArea == null && !awaitingMapArea && lastEnterMs > 0 && nowMs - lastEnterMs < 3000) {
                 enterAreaPresenceReason = "지역 진입 신호 무시 — 3초 내 중복(areaId=$newArea)"
                 return@update s
             }

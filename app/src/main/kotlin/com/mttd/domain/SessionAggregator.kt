@@ -956,8 +956,6 @@ class SessionAggregator(
             slotLastCount[slotUuid] = totalCountInSlot
             return
         }
-        // 맵을 열기 전에 얻은 것도 버리지 않고 암묵적 회차로 담는다.
-        ensureCurrentRun(timestampMs)
         // 일시정지 중이면 slot 상태만 갱신하고 픽업 카운트 안 함.
         // slotLastCount 는 계속 최신값 유지해야 resume 후 다음 Modfy delta 가 정확.
         //
@@ -1000,6 +998,15 @@ class SessionAggregator(
             if (delta == 0) return
             delta
         }
+
+        // 맵을 열기 전에 얻은 것도 버리지 않고 암묵적 회차로 담는다.
+        //
+        // 여기까지 와서 연다 — 실제로 기록할 변화가 있는 게 확정된 지점이다. 예전엔 이 함수
+        // 맨 앞에서 열어서, 거래소 안(또는 일시정지 중)처럼 카운트를 건너뛰고 빠져나가는
+        // 경우에도 회차가 만들어졌다. 열려 있는 회차가 없던 상태(리셋 직후·진행 회차 삭제
+        // 직후·맵을 한 번도 안 연 상태)에서 거래소에 들어가면 아이템 0 개짜리 빈 회차가
+        // 목록에 남았다.
+        ensureCurrentRun(timestampMs)
 
         val info = itemInfo.lookup(itemId)
         val valueResult = valueCalculator?.compute(itemId, quantity)

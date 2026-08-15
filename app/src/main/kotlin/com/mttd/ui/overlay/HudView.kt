@@ -199,15 +199,22 @@ fun HudOverlay(
                     session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> Color(0xFF94A3B8)
                     else -> Color(0xFF4ADE80)
                 }
-                Text(statusText, color = statusColor, fontSize = 10.sp)
+                Text(statusText, color = statusColor, fontSize = 10.sp, maxLines = 1)
+                Spacer(Modifier.width(5.dp))
+                // 화면 전환 탭. 스와이프만 두면 제스처가 눈에 안 보여서 화면이 둘이라는 것
+                // 자체를 모른다 — 점 두 개(●○)로 표시해 봤지만 무슨 뜻인지 읽히지 않았다.
+                HudPageTabs(page = page, onSelect = { page = it })
                 Spacer(Modifier.fillMaxWidth().weight(1f))
                 // 버튼 사이 간격은 20dp — 24dp 버튼 사이에 그만큼의 무반응 구간을 둬서
                 // 옆 버튼 오터치를 막는다. 제목을 뺀 자리가 이 여백으로 갔다.
                 //
-                // 상한은 34dp 근처다. 패널 280dp - 좌우 여백 20dp = 260dp 에서 버튼 4 개(96dp)
-                // 와 가장 긴 상태 문구("● 로그·가방", 10sp 로 약 62dp)를 빼면 간격 셋에 쓸 수
-                // 있는 폭이 102dp 다. 화면 전환 탭을 헤더가 아니라 아래 줄로 뺀 것도 이 예산
-                // 때문이다 — "수익"/"가치" 글자를 여기 넣으면 4dp 가 모자란다.
+                // 폭 예산이 빡빡하다. 패널 280dp - 좌우 여백 20dp = 260dp 안에
+                //   가장 긴 상태 문구("● 로그·가방", 10sp 로 약 58dp)
+                // + 여백 5dp + 전환 탭(8sp 두 개 + 사이 5dp, 약 37dp)
+                // + 버튼 4 개(96dp) + 간격 셋(60dp) = 약 256dp
+                // 를 넣고 있어서 남는 폭이 4dp 뿐이다. 전환 탭에 알약 배경·패딩을 주면 이걸
+                // 넘긴다(그래서 글자만 남겼다). 여기에 뭘 더 넣거나 간격을 더 벌리려면
+                // 기기에서 상태 문구가 잘리지 않는지 반드시 확인할 것.
                 HudMaterialIconButton(Icons.Filled.Settings, onOpenSettings)
                 Spacer(Modifier.width(20.dp))
                 // 일시정지는 거래소 여부로, 새로고침/초기화는 보고 있는 화면으로 가른다.
@@ -231,12 +238,6 @@ fun HudOverlay(
 
 
             }
-
-            // 화면 전환 탭. 스와이프만 두면 제스처가 눈에 안 보여서 화면이 둘이라는 것 자체를
-            // 모른다 — 점 두 개(●○)로 표시해 봤지만 무슨 뜻인지 읽히지 않았다. 글자로 적고
-            // 눌러서도 넘어가게 한다. 제스처 영역 밖(아래 Column 위)에 두는 이유는, 안에 넣으면
-            // 롱프레스 창-이동이 탭을 채갈 수 있어서다.
-            HudPageTabs(page = page, onSelect = { page = it })
 
             // 스와이프(화면 전환)와 창-이동(길게 눌러 드래그)은 헤더를 뺀 이 본문 영역에만
             // 건다. 헤더는 탭하면 접히는 영역이라(위 Row 의 clickable), 같은 자리에 롱프레스
@@ -458,12 +459,18 @@ private fun PickupRow(p: com.mttd.domain.models.PickupSummary) {
 /**
  * "수익" / "가치" 화면 전환 탭. 좌우 스와이프와 같은 동작을 눌러서도 할 수 있게 한다.
  *
+ * 헤더 안 상태 문구 옆에 얹으므로 알약 배경도 패딩도 없다 — 폭 예산이 4dp 밖에 안 남아서
+ * (헤더 Row 의 주석 참조) 배경을 주면 버튼이 밀린다. 현재 화면은 색과 굵기로만 구분한다.
+ *
  * 거래소에 들어가면 자동으로 "가치" 로 넘어가므로, 이 탭은 거래소 밖에서 가방 가치를
  * 확인하거나 거래소 안에서 수익을 다시 볼 때 쓴다.
  */
 @Composable
 private fun HudPageTabs(page: Int, onSelect: (Int) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         HudPageTab("수익", selected = page == 0) { onSelect(0) }
         HudPageTab("가치", selected = page == 1) { onSelect(1) }
     }
@@ -472,24 +479,18 @@ private fun HudPageTabs(page: Int, onSelect: (Int) -> Unit) {
 @Composable
 private fun HudPageTab(label: String, selected: Boolean, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (selected) Color(0xFF1E3A5F) else Color.Transparent)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(horizontal = 9.dp, vertical = 3.dp),
-    ) {
-        Text(
-            label,
-            color = if (selected) Color(0xFFBFDBFE) else Color(0xFF64748B),
-            fontSize = 9.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-        )
-    }
+    Text(
+        label,
+        color = if (selected) Color(0xFF93C5FD) else Color(0xFF64748B),
+        fontSize = 8.sp,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        maxLines = 1,
+        modifier = Modifier.clickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onClick = onClick,
+        ),
+    )
 }
 
 /**

@@ -10,9 +10,17 @@ import kotlinx.serialization.json.Json
  *
  * 앱 시작 시 1회 로드 (~113 KB). itemId → (koName, koType) 매핑.
  */
-class ItemInfoLookup(context: Context) {
+class ItemInfoLookup(private val context: Context) {
 
-    private val map: Map<String, ItemInfo>
+    /**
+     * 첫 조회 때 읽는다.
+     *
+     * 예전엔 생성자에서 바로 파싱해서, 서비스 onCreate(메인 스레드)가 320 KB JSON 을 통째로
+     * 동기 파싱하고 나서야 다음 줄로 갔다 — 서비스 시작이 그만큼 늦어졌다. 첫 조회는 로그
+     * 파싱 스레드에서 일어나므로 메인 스레드를 막지 않는다. `by lazy` 는 기본이 동기화라
+     * 여러 스레드가 동시에 처음 조회해도 한 번만 읽는다.
+     */
+    private val map: Map<String, ItemInfo> by lazy { loadAsset() }
 
     /**
      * 번들 자산에 없는 itemId 를 위한 런타임 보완 사전. TTD 시세 fetch 가 이름/타입을
@@ -23,15 +31,16 @@ class ItemInfoLookup(context: Context) {
      */
     private val gapFill = java.util.concurrent.ConcurrentHashMap<String, ItemInfo>()
 
-    init {
-        map = try {
+    private fun loadAsset(): Map<String, ItemInfo> {
+        val loaded = try {
             val raw = context.assets.open(ASSET_PATH).bufferedReader(Charsets.UTF_8).use { it.readText() }
             Json { ignoreUnknownKeys = true }.decodeFromString<Map<String, ItemInfo>>(raw)
         } catch (t: Throwable) {
             Log.e(TAG, "failed to load $ASSET_PATH", t)
             emptyMap()
         }
-        Log.i(TAG, "loaded ${map.size} item names")
+        Log.i(TAG, "loaded ${loaded.size} item names")
+        return loaded
     }
 
     fun lookup(itemId: String): ItemInfo? = map[itemId] ?: gapFill[itemId]

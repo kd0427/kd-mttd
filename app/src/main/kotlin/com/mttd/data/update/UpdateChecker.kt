@@ -25,11 +25,6 @@ import kotlin.coroutines.resumeWithException
  */
 class UpdateChecker {
 
-    private val client = OkHttpClient.Builder()
-        .callTimeout(15, TimeUnit.SECONDS)
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .build()
-
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
@@ -127,6 +122,16 @@ class UpdateChecker {
 
     companion object {
         private const val TAG = "mTTD.Update"
+
+        /**
+         * 인스턴스가 아니라 여기에 둔다 — 호출부(`UpdateChecker().check()`)가 매번 새로
+         * 만드는 구조라, 클라이언트가 인스턴스 필드면 확인할 때마다 커넥션 풀과 정리 스레드가
+         * 새로 생겼다. OkHttp 권장대로 하나를 공유한다.
+         */
+        private val client = OkHttpClient.Builder()
+            .callTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .build()
 
         /**
          * `1.2.10` vs `1.3.0` 같은 semver 비교. 숫자 파트만 본다.

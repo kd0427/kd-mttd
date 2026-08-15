@@ -43,7 +43,13 @@ class LogPoller(
     /** 한 줄과 그 줄이 파일에서 시작하는 바이트 오프셋. [readRange] 로 특정 지점부터 다시 읽어야
      * 하는 소비자([com.mttd.domain.CharacterLoadoutTracker] 등)를 위한 것 — 오프셋이 필요 없으면
      * [text] 만 쓰면 된다. */
-    data class Line(val text: String, val offset: Long)
+    /**
+     * @param streamReset 로그 파일이 잘려서(truncate/rotate) 읽기 지점이 처음으로 되돌아갔다는
+     *   신호. 이때는 [text] 가 비어 있고, 소비 측은 조립 중이던 메시지를 버려야 한다 —
+     *   안 그러면 잘리기 직전의 헤더에 새 파일의 payload 가 이어붙어 엉뚱한 메시지가 나온다.
+     *   별도 flow 로 알리면 라인과의 순서가 보장되지 않아 같은 스트림에 실어 보낸다.
+     */
+    data class Line(val text: String, val offset: Long, val streamReset: Boolean = false)
 
     private val _lines = MutableSharedFlow<Line>(
         replay = 0,
@@ -65,6 +71,9 @@ class LogPoller(
     private var scope: CoroutineScope? = null
     private var job: Job? = null
 
+    /** 폴링 스코프와 달리 [stop] 이 취소하지 않는다 — 종료 시 offset 저장이 실제로 끝나야 한다. */
+    private val persistScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     fun start() {
         if (job?.isActive == true) return
         val s = CoroutineScope(SupervisorJob() + Dispatchers.IO).also { scope = it }
@@ -74,6 +83,17 @@ class LogPoller(
     fun stop() {
         job?.cancel(); job = null
         scope?.cancel(); scope = null
+        // 마지막 offset 을 여기서 저장한다.
+        //
+        // pollLoop 끝의 persist 는 실행되지 않는다 — 취소는 거의 항상 delay 에서 터져서
+        // 루프 밖으로 빠져나가고, 도달하더라도 취소된 스코프에선 suspend 저장이 다시
+        // 취소된다. 그래서 3 초 debounce 사이의 진행분이 통째로 유실됐고, 폴러를 다시
+        // 켜면 그 구간을 다시 읽어 `Spv3Open` 같은 라인이 재방출됐다 (맵 진입 횟수가
+        // 한 번 더 오르고 회차가 쪼개진다 — 픽업 금액은 델타 계산이 흡수한다).
+        // 0 은 "아직 pollLoop 이 offset 을 못 실었다" 는 뜻이기도 하다 (start 직후 바로 stop).
+        // 그때 0 을 저장하면 다음 시작이 "새 세션" 으로 읽혀 파일 끝으로 건너뛴다.
+        val lastOffset = _status.value.offset
+        if (lastOffset > 0) persistScope.launch { offsetStore.save(logPath, lastOffset) }
         _status.value = _status.value.copy(active = false)
     }
 
@@ -83,6 +103,8 @@ class LogPoller(
         var offset = offsetStore.load(logPath)
         var intervalMs = MIN_INTERVAL_MS
         var idleCount = 0
+        /** 직전 폴링에서 파일을 못 읽었는지 — 복구되면 곧장 1초 간격으로 되돌리는 용도. */
+        var inaccessible = false
         val timeSource = TimeSource.Monotonic
         var lastPersistMark = timeSource.markNow()
         var lastPersistedOffset = offset
@@ -109,8 +131,14 @@ class LogPoller(
             val size = svcSize()
 
             if (size < 0) {
-                // 파일 사라짐 (rotation? uninstall?) — 인터벌 늘리고 재시도
-                intervalMs = MAX_INTERVAL_MS
+                // 파일 사라짐 (rotation? uninstall? Shizuku 바인더 사망) — 인터벌 늘리고 재시도.
+                //
+                // 여기서도 idleCount 를 세서 딥아이들(30초)까지 늘어나게 한다. 예전엔 5초로
+                // 고정이라, 게임이 안 깔린 기기에서 서비스만 켜 두면 분당 12회의 바인더 IPC 를
+                // 영원히 반복했다 (정상 유휴는 분당 2회).
+                idleCount++
+                inaccessible = true
+                intervalMs = if (idleCount >= DEEP_IDLE_THRESHOLD) DEEP_IDLE_INTERVAL_MS else MAX_INTERVAL_MS
                 _status.value = _status.value.copy(
                     intervalMs = intervalMs,
                     fileSize = -1,
@@ -120,6 +148,14 @@ class LogPoller(
                 continue
             }
 
+            // 다시 읽히기 시작하면 곧바로 1초 간격으로 돌아온다. 딥아이들에서 절반씩만
+            // 줄이면 게임을 다시 켰을 때 따라붙는 데 여러 번의 폴링이 낭비된다.
+            if (inaccessible) {
+                inaccessible = false
+                idleCount = 0
+                intervalMs = MIN_INTERVAL_MS
+            }
+
             if (size < offset) {
                 // Truncate/rotate 감지
                 Log.i(TAG, "file truncated: was $offset, now $size — resetting offset")
@@ -127,12 +163,15 @@ class LogPoller(
                 offsetStore.save(logPath, offset)
                 lastPersistedOffset = offset
                 pendingTail.clear()
+                _lines.emit(Line(text = "", offset = 0, streamReset = true))
             }
 
-            if (size > offset) {
-                idleCount = 0
-                intervalMs = (intervalMs / 2).coerceAtLeast(MIN_INTERVAL_MS)
+            // 실제로 읽어서 소비한 게 있을 때만 "자라는 중" 으로 본다. 읽기 실패나
+            // 문자 중간에서 끝난 청크는 아래 idle 사다리를 타야 재시도가 무한히 1 초로
+            // 붙어 있지 않는다.
+            var grew = false
 
+            if (size > offset) {
                 val remaining = size - offset
                 val chunkSize = remaining.coerceAtMost(MAX_CHUNK_BYTES.toLong()).toInt()
                 val bytes = withContext(Dispatchers.IO) {
@@ -143,8 +182,16 @@ class LogPoller(
                         null
                     }
                 }
-                if (bytes != null && bytes.isNotEmpty()) {
-                    var text = bytes.toString(Charsets.UTF_8)
+                // 청크는 바이트 단위로 잘리므로 마지막 문자가 반토막 날 수 있다(한글·중문
+                // 아이템명 등). 그대로 디코드하면 U+FFFD 로 바뀌어 라인 텍스트가 깨지는 데다,
+                // pendingTail 의 바이트 길이를 역산해 만드는 **라인별 파일 오프셋까지** 어긋난다
+                // (CharacterLoadoutTracker 가 그 오프셋으로 다시 읽는다).
+                // 온전히 디코드되는 데까지만 쓰고, 잘린 1~3 바이트는 다음 폴링에서 처음부터
+                // 다시 읽는다 — 그래서 offset 도 읽은 바이트가 아니라 **소비한** 바이트만큼 민다.
+                val decodable = if (bytes == null) 0 else decodableByteCount(bytes)
+                if (bytes != null && decodable > 0) {
+                    grew = true
+                    var text = String(bytes, 0, decodable, Charsets.UTF_8)
                     var textStartOffset = offset
 
                     // 파일 최초 바이트에 있는 UTF-8 BOM(3바이트)은 첫 라인에 U+FEFF 로 보이므로
@@ -190,18 +237,26 @@ class LogPoller(
                         }
                     }
 
-                    offset += bytes.size
+                    offset += decodable
                     _status.value = _status.value.copy(
                         offset = offset,
                         fileSize = size,
                         // 게임은 대기 중에도 TCP Ping 을 초당 1 회 남긴다 (실측 89 B/s).
                         // 그래서 "로그가 자라고 있다" = "게임이 켜져 있다" 로 봐도 된다.
                         lastGrowthAtMs = System.currentTimeMillis(),
-                        totalBytesRead = _status.value.totalBytesRead + bytes.size,
+                        totalBytesRead = _status.value.totalBytesRead + decodable,
                         totalLinesEmitted = _status.value.totalLinesEmitted + lineCount,
                         lastError = null,
                     )
+                } else if (bytes != null && bytes.isNotEmpty()) {
+                    // 청크 전체가 문자 하나의 조각 — 나머지 바이트가 쓰일 때까지 기다린다.
+                    Log.d(TAG, "chunk ends mid-character (${bytes.size} B) — waiting for the rest")
                 }
+            }
+
+            if (grew) {
+                idleCount = 0
+                intervalMs = (intervalMs / 2).coerceAtLeast(MIN_INTERVAL_MS)
             } else {
                 idleCount++
                 // 로그가 오래 안 커지면 게임을 안 하는 것 → 거의 잠든다.
@@ -225,6 +280,11 @@ class LogPoller(
                 lastPersistMark = timeSource.markNow()
             }
 
+            // 아직 이번에 확인한 크기까지 다 못 읽었으면(한 번에 256KB 상한) 쉬지 않고 이어서
+            // 읽는다. 예전엔 청크마다 1 초씩 쉬어서, 재로그인 때 오는 대형 블록이 화면에
+            // 반영되기까지 몇 초씩 밀렸다.
+            if (grew && size > offset) continue
+
             delay(intervalMs)
         }
 
@@ -242,6 +302,32 @@ class LogPoller(
     }
 
     private fun coroutineScopeIsActive() = scope?.isActive == true
+
+    /**
+     * [bytes] 앞에서부터 UTF-8 로 온전히 디코드되는 바이트 수.
+     *
+     * 마지막 문자가 잘려 있으면 그 문자가 **시작하는 위치**를 돌려준다 — 호출측은 거기까지만
+     * 소비하고 잘린 조각은 다음 청크에서 처음부터 다시 읽는다. 뒤에서 최대 4 바이트만 보면
+     * 된다 (UTF-8 문자 최대 길이). 선두 바이트가 아예 망가진 경우엔 전체를 소비해서
+     * 폴러가 같은 자리에 멈춰 있지 않게 한다.
+     */
+    private fun decodableByteCount(bytes: ByteArray): Int {
+        var i = bytes.size - 1
+        val floor = maxOf(0, bytes.size - 4)
+        while (i >= floor) {
+            val b = bytes[i].toInt() and 0xFF
+            if (b and 0xC0 == 0x80) { i--; continue }   // 이어지는 바이트 — 더 앞으로
+            val need = when {
+                b and 0x80 == 0x00 -> 1
+                b and 0xE0 == 0xC0 -> 2
+                b and 0xF0 == 0xE0 -> 3
+                b and 0xF8 == 0xF0 -> 4
+                else -> 1   // 잘못된 선두 바이트 — 그대로 소비
+            }
+            return if (i + need <= bytes.size) bytes.size else i
+        }
+        return bytes.size
+    }
 
     /** 완결된 라인 목록(오프셋 포함) + 미완성 tail 텍스트 + tail 이 시작하는 파일 오프셋. */
     private data class SplitResult(val lines: List<Line>, val tailText: String, val tailStartOffset: Long)

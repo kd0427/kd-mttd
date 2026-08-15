@@ -51,8 +51,26 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     override val savedStateRegistry: SavedStateRegistry
         get() = savedStateRegistryController.savedStateRegistry
 
+    /**
+     * 로그 파싱·집계 전용 단일 스레드.
+     *
+     * 예전엔 라인 소비가 lifecycleScope(메인 스레드)에서 돌아서, 재로그인 때 오는
+     * `GetPlayerData` 한 블록(수천 줄)을 메인에서 통째로 파싱했다 — 폴러가 suspend
+     * 백프레셔라 드롭 없이 다 밀어넣는 만큼 그 시간 동안 오버레이가 끊긴다.
+     *
+     * 집계기 내부 자료구조(slotLastCount 등)는 스레드 안전하지 않으므로, 라인 소비뿐
+     * 아니라 **사용자 액션(일시정지·리셋·보유 갱신·회차 삭제·시간 모드)까지 전부** 이
+     * 컨텍스트 하나로 모아 단일 스레드 격리를 유지한다. 상태 발행은 StateFlow 라
+     * 어느 스레드에서 써도 안전하다.
+     */
+    private val aggregatorContext =
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        kotlinx.coroutines.Dispatchers.Default.limitedParallelism(1)
+
     private var poller: LogPoller? = null
     private var pollerBootstrap: kotlinx.coroutines.Job? = null
+    /** 현재 폴러의 status/lines 수집 잡. 폴러를 갈아끼울 때 같이 취소한다. */
+    private val pollerJobs = mutableListOf<kotlinx.coroutines.Job>()
     private lateinit var offsetStore: OffsetStore
     private lateinit var itemInfo: ItemInfoLookup
     private lateinit var aggregator: SessionAggregator
@@ -136,13 +154,17 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     val recentLines: StateFlow<List<String>> = _recentLines.asStateFlow()
 
     fun resetSession() {
-        aggregator.resetSession()
+        lifecycleScope.launch(aggregatorContext) { aggregator.resetSession() }
         lifecycleScope.launch { runRepo.clear() }
     }
-    fun togglePause() = aggregator.togglePause()
+    fun togglePause() {
+        lifecycleScope.launch(aggregatorContext) { aggregator.togglePause() }
+    }
 
     /** "자산" 탭/거래소 HUD 의 수동 새로고침 버튼에서 호출. */
-    fun refreshHoldings() = aggregator.refreshHoldings()
+    fun refreshHoldings() {
+        lifecycleScope.launch(aggregatorContext) { aggregator.refreshHoldings() }
+    }
 
     /**
      * 잘못 집계된 회차 삭제. 세션 총합·아이템 합계도 남은 회차 기준으로 재계산된다.
@@ -151,7 +173,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     fun deleteRun(runId: Long) {
         lifecycleScope.launch {
             val items = runRepo.loadItems(runId)
-            aggregator.deleteRun(runId, items)
+            withContext(aggregatorContext) { aggregator.deleteRun(runId, items) }
             runRepo.delete(runId)
         }
     }
@@ -191,7 +213,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             // 완료된 회차의 아이템 목록은 디스크로. 메모리엔 요약만 남는다.
             onRunFinished = { run -> lifecycleScope.launch { runRepo.save(run) } },
         )
-        lifecycleScope.launch {
+        lifecycleScope.launch(aggregatorContext) {
             overlayPrefs.timeTrackingMode.collect { aggregator.setTimeTrackingMode(it) }
         }
         ensureNotificationChannel()
@@ -244,11 +266,16 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
                     com.mttd.data.prices.PriceSource.fromId(overlayPrefs.priceSourceId.first())
                 )
             }
+            // 실패 재시도는 1분에서 시작해 두 배씩 늘린다(최대 30분). 예전엔 1분 고정이라
+            // 비행기 모드나 서버 장애처럼 오래 가는 실패에서 분당 재시도를 무한히 반복했다.
+            var retryMs = PRICE_RETRY_INTERVAL_MS
             while (true) {
                 val r = priceRepo.refreshLatest()
                 val ok = r.isSuccess && priceRepo.state.value.itemsWithPrice > 1
-                // 성공하면 TTL(1h) 주기로 재확인, 실패하면 1분 뒤 재시도.
-                kotlinx.coroutines.delay(if (ok) PRICE_REFRESH_INTERVAL_MS else PRICE_RETRY_INTERVAL_MS)
+                if (ok) retryMs = PRICE_RETRY_INTERVAL_MS
+                // 성공하면 TTL(1h) 주기로 재확인, 실패하면 늘어나는 간격으로 재시도.
+                kotlinx.coroutines.delay(if (ok) PRICE_REFRESH_INTERVAL_MS else retryMs)
+                if (!ok) retryMs = (retryMs * 2).coerceAtMost(PRICE_RETRY_MAX_MS)
             }
         }
     }
@@ -303,6 +330,14 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             ACTION_HIDE_OVERLAY -> {
                 lifecycleScope.launch { overlayPrefs.setGamePanelEnabled(false) }
                 destroyOverlay()
+                // 이 인텐트는 startService 로 오므로 서비스가 죽어 있으면 이것만으로 새로 뜬다.
+                // 그대로 START_STICKY 로 남기면 foreground 승격도 폴링도 없는 상태로 상주하다가,
+                // 시스템이 회수 후 되살릴 때 null-intent 분기를 타서 사용자가 "중지" 한 추적이
+                // 부활한다. 오버레이만 끄러 온 인텐트가 서비스를 살려둘 이유가 없다.
+                if (!foregroundStarted) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
             }
             ACTION_SHOW_HUD -> {
                 ensureOverlay().showHud()
@@ -374,10 +409,20 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             logPath = path,
         )
         poller = p
-        // status/lines forwarding
-        lifecycleScope.launch { p.status.collect { _status.value = it } }
-        lifecycleScope.launch {
+        // status/lines forwarding.
+        // 두 수집 잡은 stopPoller 에서 반드시 같이 취소한다 — StateFlow/SharedFlow 수집은
+        // 스스로 끝나지 않아서, 예전엔 폴러를 다시 시작할 때마다 옛 폴러와 코루틴 2 개가
+        // 서비스가 살아 있는 내내 남았다. 게다가 옛 status 수집이 stop() 의 active=false 를
+        // 뒤늦게 흘려보내 새 폴러의 상태 표시를 뒤집을 수도 있다.
+        pollerJobs += lifecycleScope.launch { p.status.collect { _status.value = it } }
+        pollerJobs += lifecycleScope.launch(aggregatorContext) {
             p.lines.collect { line ->
+                if (line.streamReset) {
+                    // 로그 파일이 잘렸다 — 조립 중이던 것은 뒤가 영원히 안 오므로 양쪽 다 버린다.
+                    assembler.reset()
+                    characterLoadoutTracker.onStreamReset()
+                    return@collect
+                }
                 // SharedFlow replay는 진단 화면의 구독 교체 타이밍에 비어 보일 수 있다.
                 // 상태로 마지막 10줄을 직접 유지해, 읽은 로그와 화면이 반드시 일치하게 한다.
                 // 폴러가 이제 offset 을 같이 실어 보내므로(로그 릴레이가 스냅샷 시작 지점을
@@ -422,6 +467,8 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     private fun stopPoller() {
         pollerBootstrap?.cancel()
         pollerBootstrap = null
+        pollerJobs.forEach { it.cancel() }
+        pollerJobs.clear()
         poller?.stop()
         poller = null
     }
@@ -466,7 +513,11 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         super.onDestroy()
     }
 
+    /** [startForegroundOnce] 가 한 번이라도 불렸는지 — 오버레이만 끄러 온 인텐트가 서비스를 살려두지 않게 한다. */
+    private var foregroundStarted = false
+
     private fun startForegroundOnce() {
+        foregroundStarted = true
         val notif = buildNotification("로그 감시 중")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -518,6 +569,8 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         /** 시세 TTL 과 동일 (PriceRepository.TTL_MS = 1h). */
         private const val PRICE_REFRESH_INTERVAL_MS = 60L * 60 * 1000
         private const val PRICE_RETRY_INTERVAL_MS = 60L * 1000
+        /** 실패가 이어질 때의 재시도 상한 — 여기까지 두 배씩 늘어난다. */
+        private const val PRICE_RETRY_MAX_MS = 30L * 60 * 1000
         /** Shizuku 준비 / 게임 패키지 탐색 재시도 간격. */
         private const val POLLER_BOOTSTRAP_RETRY_MS = 3_000L
         private const val MAX_RECENT_DEBUG_LINES = 10

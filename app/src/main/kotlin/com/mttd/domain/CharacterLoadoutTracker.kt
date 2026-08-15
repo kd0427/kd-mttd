@@ -1,5 +1,6 @@
 package com.mttd.domain
 
+import android.util.Log
 import com.mttd.data.export.CharacterLoadout
 import com.mttd.data.export.LoadoutGear
 import com.mttd.data.export.LoadoutGenius
@@ -142,11 +143,20 @@ class CharacterLoadoutTracker {
      * `skillLayout.slots` 의 캡=30을 우회하는 유일한 경로)와, 세션 중 실제 스킬 교체 시 실시간으로
      * 오는 같은 델타가 전부 이 오프셋 뒤쪽에 있기 때문 — 블록 원문만 잘라 보내면 서버 쪽 파서는
      * 캡=30짜리 스킬만 보게 된다.
+     *
+     * `@Volatile` 인 이유: 쓰기는 로그 파싱 스레드
+     * ([com.mttd.service.TrackerForegroundService] 의 집계 전용 단일 스레드), 읽기는 UI
+     * 스레드다. 예전엔 파싱도 메인에서 돌아 문제가 없었다.
      */
+    @Volatile
     var lastSnapshotStartOffset: Long? = null
         private set
 
-    /** [loadout] 이 갱신된 시각 (epoch ms). UI 의 "n 분 전" 표시용이라 StateFlow 로 감쌀 정도는 아님. */
+    /**
+     * [loadout] 이 갱신된 시각 (epoch ms). UI 의 "n 분 전" 표시용이라 StateFlow 로 감쌀 정도는 아님.
+     * 위와 같은 이유로 `@Volatile`.
+     */
+    @Volatile
     var latestSyncAtMs: Long = 0
         private set
 
@@ -186,7 +196,28 @@ class CharacterLoadoutTracker {
             buffer.clear()
             return
         }
+        // 블록의 끝(`----Socket ... End----`)이 로그 회전·절단으로 유실되면 다음 종결 라인이
+        // 올 때까지 렌더러 스팸까지 전부 쌓인다. 정상 스냅샷보다 넉넉한 상한을 두고, 넘으면
+        // 블록을 포기한다 — 어차피 그 payload 는 앞이 잘려 파싱되지 않는다.
+        if (buffer.size >= MAX_BLOCK_LINES) {
+            Log.w(TAG, "GetPlayerData block exceeded $MAX_BLOCK_LINES lines — dropping")
+            inBlock = false
+            buffer.clear()
+            return
+        }
         buffer += line
+    }
+
+    /**
+     * 로그 파일이 잘렸을 때 조립 중이던 블록을 버린다.
+     *
+     * 뒤가 영원히 안 오는 조각이라, 안 버리면 잘리기 직전의 앞부분에 새 파일 라인이
+     * 이어붙어 파싱이 통째로 어긋난다. 스킬 슬롯 상태는 지우지 않는다 — 그건 로그가
+     * 아니라 캐릭터의 현재 상태고, 다음 로그인의 `Reset PageId=-6` 이 알아서 갱신한다.
+     */
+    fun onStreamReset() {
+        inBlock = false
+        buffer.clear()
     }
 
     /** 스킬 캡을 우회하는 `PageId=-6` 델타 처리. 클래스 doc의 "왜 PageId=-6 델타로 만드는가" 참조. */
@@ -352,4 +383,13 @@ class CharacterLoadoutTracker {
     private fun Map<String, Any>.child(key: String): Map<String, Any>? = this[key].asMap()
 
     private fun Map<String, Any>.leaf(key: String): String? = this[key] as? String
+
+    companion object {
+        private const val TAG = "mTTD.Loadout"
+        /**
+         * `GetPlayerData` 한 블록의 라인 상한. 실측 스냅샷이 수천 줄이라 넉넉히 잡되,
+         * 종결 라인 유실로 무한히 쌓이는 것만 막는다 (버퍼 초기 용량 8192 와 같은 눈금).
+         */
+        private const val MAX_BLOCK_LINES = 20_000
+    }
 }

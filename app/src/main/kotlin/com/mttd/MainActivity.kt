@@ -1,7 +1,11 @@
 package com.mttd
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
@@ -21,9 +25,27 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
+    /**
+     * 알림 권한 요청기. 거부돼도 추적은 그대로 동작한다 — 포그라운드 서비스 알림만 안 보이고,
+     * 그러면 알림을 눌러 앱으로 돌아오는 길이 사라진다.
+     *
+     * Android 13+ 는 `POST_NOTIFICATIONS` 를 매니페스트에 선언만 해서는 알림이 뜨지 않는데,
+     * 지금까지 요청하는 코드가 어디에도 없었다.
+     */
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** Shizuku 권한 다이얼로그를 이 액티비티에서 이미 한 번 띄웠는지. [onResume] 참조. */
+    private var permissionRequested = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         // 앱 팔레트가 밝은 배경으로 고정돼 있으므로(ui/theme/Theme.kt) 시스템 바에도 "배경이 밝다"고
         // 알려 아이콘을 어둡게 그리게 한다. 이 플래그는 아이콘 색이 아니라 **배경의 밝기**를 뜻한다 —
         // false 로 두면 enableEdgeToEdge() 로 바 뒤까지 그려진 흰 배경 위에 흰 아이콘이 얹혀
@@ -75,7 +97,12 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         val shizuku = TrackerApplication.instance.shizukuManager
         // 다른 앱에서 돌아왔을 때 Shizuku 상태 재조회 (권한이 방금 grant 됐을 수 있음).
-        shizuku.requestPermissionOrBind()
+        //
+        // 권한 요청 다이얼로그까지 띄우는 건 이 화면에 처음 들어왔을 때 한 번이면 된다.
+        // 미승인 상태로 앱을 들락날락할 때마다 다이얼로그가 다시 뜨는 게 예전 동작이었다.
+        // 사용자가 직접 권한 버튼을 누르는 길(onRequestPermission)은 그대로 있다.
+        if (permissionRequested) shizuku.bindIfPermitted() else shizuku.requestPermissionOrBind()
+        permissionRequested = true
         // Shizuku 준비되면 폴러 자동 시작 (이미 실행 중이면 no-op)
         autoStartTracker()
     }

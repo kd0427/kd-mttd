@@ -17,28 +17,27 @@ import kotlinx.serialization.json.Json
  * `assets/map_alias.json` 의 `prefix` — 코드네임이 특정 접두사로 시작하면 매칭 (시즌 이벤트 맵 등
  * 접미사가 계속 바뀌는 것들).
  */
-class MapNameLookup(context: Context) {
+class MapNameLookup(private val context: Context) {
 
-    private val exact: Map<String, String>
-    private val prefixes: List<Pair<String, String>>
+    // 첫 조회 때 읽는다 — 이유는 [com.mttd.data.items.ItemInfoLookup.map] 주석 참조
+    // (서비스 onCreate 가 메인 스레드에서 에셋 JSON 을 동기 파싱하던 것을 뒤로 미룬다).
+    private val exact: Map<String, String> by lazy { loadExact() }
+    private val prefixes: List<Pair<String, String>> by lazy { loadPrefixes() }
 
-    init {
-        val json = Json { ignoreUnknownKeys = true }
-        exact = try {
-            val raw = context.assets.open(MAP_ASSET_PATH).bufferedReader(Charsets.UTF_8).use { it.readText() }
-            json.decodeFromString<Map<String, String>>(raw)
-        } catch (t: Throwable) {
-            Log.e(TAG, "failed to load $MAP_ASSET_PATH", t)
-            emptyMap()
-        }
-        prefixes = try {
-            val raw = context.assets.open(ALIAS_ASSET_PATH).bufferedReader(Charsets.UTF_8).use { it.readText() }
-            json.decodeFromString<MapAliasFile>(raw).prefix.toList()
-        } catch (t: Throwable) {
-            Log.e(TAG, "failed to load $ALIAS_ASSET_PATH", t)
-            emptyList()
-        }
-        Log.i(TAG, "loaded ${exact.size} map names, ${prefixes.size} prefix aliases")
+    private fun loadExact(): Map<String, String> = try {
+        val raw = context.assets.open(MAP_ASSET_PATH).bufferedReader(Charsets.UTF_8).use { it.readText() }
+        Json { ignoreUnknownKeys = true }.decodeFromString<Map<String, String>>(raw)
+    } catch (t: Throwable) {
+        Log.e(TAG, "failed to load $MAP_ASSET_PATH", t)
+        emptyMap()
+    }
+
+    private fun loadPrefixes(): List<Pair<String, String>> = try {
+        val raw = context.assets.open(ALIAS_ASSET_PATH).bufferedReader(Charsets.UTF_8).use { it.readText() }
+        Json { ignoreUnknownKeys = true }.decodeFromString<MapAliasFile>(raw).prefix.toList()
+    } catch (t: Throwable) {
+        Log.e(TAG, "failed to load $ALIAS_ASSET_PATH", t)
+        emptyList()
     }
 
     /**

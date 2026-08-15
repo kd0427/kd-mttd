@@ -73,13 +73,21 @@ class LogRelayClient {
     private suspend fun Call.awaitResponse(): Response =
         suspendCancellableCoroutine { cont ->
             enqueue(object : Callback {
-                override fun onResponse(call: Call, response: Response) { cont.resume(response) {} }
+                // 응답 도착과 코루틴 취소가 겹치면 아무도 이 Response 를 닫지 않는다 —
+                // 취소 콜백에서 직접 닫아 커넥션을 반납한다.
+                override fun onResponse(call: Call, response: Response) {
+                    cont.resume(response) { _ -> response.closeQuietly() }
+                }
                 override fun onFailure(call: Call, e: IOException) { cont.resumeWithException(e) }
             })
             cont.invokeOnCancellation {
                 try { cancel() } catch (_: Throwable) {}
             }
         }
+
+    private fun Response.closeQuietly() {
+        try { close() } catch (_: Throwable) {}
+    }
 
     companion object {
         const val BASE_URL = "https://mini-tlidb.winterer.workers.dev"

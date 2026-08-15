@@ -591,21 +591,14 @@ fun ValueScreen() {
         }
     }
 
-    // 시안 하단 캡션.
+    // 시안 하단 캡션. 예전엔 같은 문장이 스타일만 달리해 두 번 찍혔고, 내용도 틀렸다 —
+    // 실제 정렬 기준은 갱신 시각이 아니라 가치(SessionAggregator.computeHoldings) 다.
     Text(
-        "아이템 목록은 시세 갱신 시각 기준으로 정렬됩니다",
+        "아이템 목록은 가치가 높은 순으로 정렬됩니다",
         fontSize = 11.sp,
         color = MttdColors.TextMuted,
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-    )
-
-    Text(
-        "아이템 목록은 시세 갱신 시각 기준으로 정렬됩니다.",
-        modifier = Modifier.fillMaxWidth(),
-        textAlign = TextAlign.Center,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
     )
 }
 

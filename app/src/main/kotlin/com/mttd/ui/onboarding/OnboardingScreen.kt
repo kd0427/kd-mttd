@@ -80,6 +80,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import com.mttd.IUserService
 import com.mttd.ui.theme.MttdColors
 import com.mttd.TrackerApplication
@@ -517,7 +518,14 @@ private fun EarningsSummaryCard() {
 
     val ticking = session.active && !session.paused && session.baselineReady
     var tick by remember { mutableStateOf(0) }
-    LaunchedEffect(ticking) { while (ticking) { kotlinx.coroutines.delay(1000); tick++ } }
+    // 시간이 흐르는 동안 **화면이 보일 때만** 1 초 틱을 돈다 (화면을 꺼도 돌던 것을 막는다).
+    val tickOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(ticking, tickOwner) {
+        if (!ticking) return@LaunchedEffect
+        tickOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) { kotlinx.coroutines.delay(1000); tick++ }
+        }
+    }
     val elapsed = remember(session.startedAtMs, session.paused, tick) { session.elapsedMs }
     val perHour = remember(session.totalValue, session.paused, tick) { session.incomePerHour }
 
@@ -818,8 +826,19 @@ private fun PriceSummaryLine() {
             modifier = Modifier.weight(1f),
         )
         if (loaded) {
+            // "N 분 전" 은 시세가 안 바뀌면 재구성이 없어 그대로 멈춰 있었다. 화면이 보이는
+            // 동안만 1 분 틱을 돌려 갱신한다 (초 단위 정밀도는 필요 없는 표시라 1 분이면 충분).
+            var agoTick by remember { mutableStateOf(0) }
+            val agoOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            LaunchedEffect(agoOwner) {
+                agoOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                    // 돌아오자마자 한 번 갱신하고 나서 기다린다 — delay 가 먼저면 백그라운드에
+                    // 오래 있다 온 직후 최대 1 분간 옛 값이 남는다.
+                    while (true) { agoTick++; delay(60_000) }
+                }
+            }
             Text(
-                formatUpdatedAgo(priceState.lastUpdatedMs),
+                remember(priceState.lastUpdatedMs, agoTick) { formatUpdatedAgo(priceState.lastUpdatedMs) },
                 fontSize = 11.sp,
                 color = MttdColors.BlueText,
             )
@@ -991,9 +1010,13 @@ private fun ProbeCard(userService: () -> IUserService?) {
     var logSize by remember { mutableStateOf("(조회 중...)") }
     var logPath by remember { mutableStateOf("(대기)") }
 
-    LaunchedEffect(Unit) {
+    // Shizuku 바인더가 죽은 채로 카드를 열면 서비스가 null 이라 조회가 통째로 멈춘다.
+    // 바인더가 돌아오면 다시 시도하도록, 서비스 인스턴스가 바뀌면 이 effect 를 재시작한다.
+    LaunchedEffect(userService()) {
         val svc = userService() ?: run {
             logSize = "UserService 없음"
+            installedGames = "(Shizuku 대기 중)"
+            logPath = "(대기)"
             return@LaunchedEffect
         }
         withContext(Dispatchers.IO) {
@@ -1168,8 +1191,13 @@ private fun LogTailCard(userService: () -> IUserService?) {
             // StateFlow 가 새로 흘리지 않아서(deep idle 이면 30초에 한 번도 안 바뀐다)
             // 표시가 그대로 멈춰 버린다. 이 카드가 열려 있는 동안만 1 초 틱을 돈다.
             var tick by remember { mutableStateOf(0) }
-            LaunchedEffect(Unit) {
-                while (true) { delay(1000); tick++ }
+            // 화면이 꺼지거나 앱이 뒤로 가면 멈춘다 — 안 보이는 표시를 위해 초당 재구성을
+            // 돌릴 이유가 없다.
+            val tickOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            LaunchedEffect(tickOwner) {
+                tickOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                    while (true) { delay(1000); tick++ }
+                }
             }
             val lastGrowth = status.lastGrowthAtMs
             LabelValue(
@@ -1258,12 +1286,13 @@ private fun OverlayCard() {
     val panelEnabled by prefs.gamePanelEnabled.collectAsStateWithLifecycle(initialValue = true)
     val miniPanelNetValue by prefs.miniPanelNetValue.collectAsStateWithLifecycle(initialValue = false)
 
-    // 앱이 다시 포그라운드로 올 때 권한 상태 재확인
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(500)
-            val v = android.provider.Settings.canDrawOverlays(context)
-            if (v != canDraw) canDraw = v
+    // 앱이 다시 포그라운드로 올 때 권한 상태 재확인.
+    // 오버레이 권한은 시스템 설정 화면에서만 바뀌므로 돌아온 시점에 한 번 보면 된다 —
+    // 예전엔 0.5 초 폴링이라 화면을 꺼 둬도 계속 IPC 가 나갔다.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            canDraw = android.provider.Settings.canDrawOverlays(context)
         }
     }
 
@@ -2176,34 +2205,42 @@ private fun ExitCard() {
                 )
             }
             if (confirmExit) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { confirmExit = false }) { Text("취소") }
-                    TextButton(onClick = {
-                        com.mttd.service.TrackerForegroundService.stop(context)
-                        (context as? android.app.Activity)?.finishAndRemoveTask()
-                    }) {
-                        Text("종료 확인", color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            } else {
-                OutlinedButton(
-                    onClick = { confirmExit = true },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
-                    shape = RoundedCornerShape(11.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MttdColors.DangerLine),
-                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Logout,
-                        contentDescription = null,
-                        modifier = Modifier.size(15.dp),
-                    )
-                    Spacer(Modifier.width(7.dp))
-                    Text("앱 종료", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                }
+                // 리셋과 같은 이유로 팝업이다 — 같은 자리에서 버튼만 바뀌면 빠르게 두 번
+                // 탭했을 때 두 번째 탭이 바뀐 자리의 "확인" 에 그대로 들어간다.
+                // 종료는 세션(수익·회차·시간)이 통째로 사라지는 동작이라 실수 비용이 크다.
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmExit = false },
+                    title = { Text("mTTD 를 종료할까요?") },
+                    text = { Text("로그 추적과 오버레이가 중지되고, 지금까지 집계된 수익·회차 기록이 사라집니다.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmExit = false
+                            com.mttd.service.TrackerForegroundService.stop(context)
+                            (context as? android.app.Activity)?.finishAndRemoveTask()
+                        }) { Text("종료", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmExit = false }) { Text("취소") }
+                    },
+                )
+            }
+            OutlinedButton(
+                onClick = { confirmExit = true },
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                shape = RoundedCornerShape(11.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MttdColors.DangerLine),
+                colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Logout,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp),
+                )
+                Spacer(Modifier.width(7.dp))
+                Text("앱 종료", fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
         }
     }

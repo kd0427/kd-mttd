@@ -42,7 +42,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mttd.data.shizuku.ShizukuState
-import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.first
 
 private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
@@ -80,11 +82,12 @@ fun SetupWizardScreen(
     val context = LocalContext.current
 
     var canDraw by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(500)
-            val v = Settings.canDrawOverlays(context)
-            if (v != canDraw) canDraw = v
+    // 오버레이 권한은 시스템 설정 화면에서만 바뀌므로, 돌아왔을 때 한 번 확인하면 충분하다.
+    // 예전엔 0.5 초마다 폴링해서 화면이 꺼져 있어도 계속 IPC 를 날렸다.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            canDraw = Settings.canDrawOverlays(context)
         }
     }
 

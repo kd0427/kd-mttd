@@ -46,8 +46,8 @@ class ObservedPriceStore {
             observedAtMs = observedAtMs,
             currencyId = currencyId,
         )
-        // update{} (CAS) 로 쓴다 — 기록은 로그 파싱 스레드, 비우기는 UI 스레드라
-        // `value = value + x` 로 읽고-쓰면 방금 비운 맵이 통째로 되살아날 수 있다.
+        // 읽고-쓰기는 update{} (CAS) 로. `value = value + x` 는 그 사이에 clear() 가 끼면
+        // 방금 비운 맵을 통째로 되살린다.
         _prices.update { it + (itemId to entry) }
         Log.i(TAG, "observed $itemId avg=%.4f from ${unitPrices.size} listings".format(avg))
     }

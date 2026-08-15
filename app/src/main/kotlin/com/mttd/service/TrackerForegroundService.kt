@@ -51,22 +51,18 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     override val savedStateRegistry: SavedStateRegistry
         get() = savedStateRegistryController.savedStateRegistry
 
-    /**
-     * 로그 파싱·집계 전용 단일 스레드.
-     *
-     * 예전엔 라인 소비가 lifecycleScope(메인 스레드)에서 돌아서, 재로그인 때 오는
-     * `GetPlayerData` 한 블록(수천 줄)을 메인에서 통째로 파싱했다 — 폴러가 suspend
-     * 백프레셔라 드롭 없이 다 밀어넣는 만큼 그 시간 동안 오버레이가 끊긴다.
-     *
-     * 집계기 내부 자료구조(slotLastCount 등)는 스레드 안전하지 않으므로, 라인 소비뿐
-     * 아니라 **사용자 액션(일시정지·리셋·보유 갱신·회차 삭제·시간 모드)까지 전부** 이
-     * 컨텍스트 하나로 모아 단일 스레드 격리를 유지한다. 상태 발행은 StateFlow 라
-     * 어느 스레드에서 써도 안전하다.
-     */
-    private val aggregatorContext =
-        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-        kotlinx.coroutines.Dispatchers.Default.limitedParallelism(1)
-
+    // 집계기(aggregator)는 **메인 스레드에서만** 만진다. 라인 소비도, 사용자 액션도.
+    //
+    // 한때 라인 파싱을 전용 단일 스레드로 옮겼다가 되돌렸다(0.5.12 → 0.5.13). 옮겨서 얻는
+    // 건 재로그인 때 오는 `GetPlayerData` 한 블록(수천 줄)을 파싱하는 동안 오버레이가 안
+    // 굳는 것뿐인데, 그 순간은 가방 정렬 전이라 어차피 집계가 멈춰 있다. 평시 비용도 라인당
+    // `contains` 몇 번이 전부다 — 실제 파싱까지 가는 줄은 1.25% 뿐이다(SessionAggregator
+    // 의 isInteresting).
+    //
+    // 반대로 집계기 내부 자료구조(slotLastCount 등)는 스레드 안전하지 않아서, 파싱을 옮기면
+    // 사용자 액션(일시정지·리셋·보유 갱신·회차 삭제·시간 모드)까지 전부 같은 컨텍스트로
+    // 몰아야 격리가 성립한다. 한 군데라도 새면 증상은 **조용히 틀린 수치**다. 전부 메인 한
+    // 곳이면 그 경합이 애초에 불가능하다 — 그 보장을 작은 이득과 바꾸지 않는다.
     private var poller: LogPoller? = null
     private var pollerBootstrap: kotlinx.coroutines.Job? = null
     /** 현재 폴러의 status/lines 수집 잡. 폴러를 갈아끼울 때 같이 취소한다. */
@@ -154,17 +150,13 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     val recentLines: StateFlow<List<String>> = _recentLines.asStateFlow()
 
     fun resetSession() {
-        lifecycleScope.launch(aggregatorContext) { aggregator.resetSession() }
+        aggregator.resetSession()
         lifecycleScope.launch { runRepo.clear() }
     }
-    fun togglePause() {
-        lifecycleScope.launch(aggregatorContext) { aggregator.togglePause() }
-    }
+    fun togglePause() = aggregator.togglePause()
 
     /** "자산" 탭/거래소 HUD 의 수동 새로고침 버튼에서 호출. */
-    fun refreshHoldings() {
-        lifecycleScope.launch(aggregatorContext) { aggregator.refreshHoldings() }
-    }
+    fun refreshHoldings() = aggregator.refreshHoldings()
 
     /**
      * 잘못 집계된 회차 삭제. 세션 총합·아이템 합계도 남은 회차 기준으로 재계산된다.
@@ -173,7 +165,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     fun deleteRun(runId: Long) {
         lifecycleScope.launch {
             val items = runRepo.loadItems(runId)
-            withContext(aggregatorContext) { aggregator.deleteRun(runId, items) }
+            aggregator.deleteRun(runId, items)
             runRepo.delete(runId)
         }
     }
@@ -213,7 +205,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             // 완료된 회차의 아이템 목록은 디스크로. 메모리엔 요약만 남는다.
             onRunFinished = { run -> lifecycleScope.launch { runRepo.save(run) } },
         )
-        lifecycleScope.launch(aggregatorContext) {
+        lifecycleScope.launch {
             overlayPrefs.timeTrackingMode.collect { aggregator.setTimeTrackingMode(it) }
         }
         ensureNotificationChannel()
@@ -415,7 +407,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         // 서비스가 살아 있는 내내 남았다. 게다가 옛 status 수집이 stop() 의 active=false 를
         // 뒤늦게 흘려보내 새 폴러의 상태 표시를 뒤집을 수도 있다.
         pollerJobs += lifecycleScope.launch { p.status.collect { _status.value = it } }
-        pollerJobs += lifecycleScope.launch(aggregatorContext) {
+        pollerJobs += lifecycleScope.launch {
             p.lines.collect { line ->
                 if (line.streamReset) {
                     // 로그 파일이 잘렸다 — 조립 중이던 것은 뒤가 영원히 안 오므로 양쪽 다 버린다.

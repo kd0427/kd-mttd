@@ -143,20 +143,11 @@ class CharacterLoadoutTracker {
      * `skillLayout.slots` 의 캡=30을 우회하는 유일한 경로)와, 세션 중 실제 스킬 교체 시 실시간으로
      * 오는 같은 델타가 전부 이 오프셋 뒤쪽에 있기 때문 — 블록 원문만 잘라 보내면 서버 쪽 파서는
      * 캡=30짜리 스킬만 보게 된다.
-     *
-     * `@Volatile` 인 이유: 쓰기는 로그 파싱 스레드
-     * ([com.mttd.service.TrackerForegroundService] 의 집계 전용 단일 스레드), 읽기는 UI
-     * 스레드다. 예전엔 파싱도 메인에서 돌아 문제가 없었다.
      */
-    @Volatile
     var lastSnapshotStartOffset: Long? = null
         private set
 
-    /**
-     * [loadout] 이 갱신된 시각 (epoch ms). UI 의 "n 분 전" 표시용이라 StateFlow 로 감쌀 정도는 아님.
-     * 위와 같은 이유로 `@Volatile`.
-     */
-    @Volatile
+    /** [loadout] 이 갱신된 시각 (epoch ms). UI 의 "n 분 전" 표시용이라 StateFlow 로 감쌀 정도는 아님. */
     var latestSyncAtMs: Long = 0
         private set
 

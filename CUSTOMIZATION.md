@@ -16,9 +16,23 @@ git push -u origin main
 
 ```bash
 git fetch upstream
-git log --oneline main..upstream/main
-git merge upstream/main
+git log --oneline aa6bbd4..upstream/main
 ```
+
+### ⚠️ `main..upstream/main` 과 `git merge upstream/main` 은 쓰지 않는다
+
+2026-08-15 에 커밋 메시지에서 `Co-Authored-By: Claude` 트레일러를 걷어내려고 전체 히스토리를
+재작성했다. 해시가 전부 바뀌어서 **git 이 원본과 공유하던 이력을 더 이상 알아보지 못한다.**
+merge-base 가 `aa6bbd4`(v0.3.4) 에서 `b9a9590`(v0.3.0) 으로 후퇴했고, 그 결과
+
+- `git log main..upstream/main` 은 실제 신규 8 개를 **27 개로 부풀려 보여준다.**
+- `git merge upstream/main` 은 **이미 반영된 19 개를 다시 얹으려 든다.**
+
+커밋이 사라진 건 아니다 — `aa6bbd4` 는 `upstream/main` 을 통해 그대로 살아 있다. 원본 이력을
+훑을 때 **실질 기준점을 `aa6bbd4` 로 잡으면** 정확한 목록이 나온다.
+
+반영은 merge 가 아니라 필요한 커밋만 골라 손으로 옮기는 방식으로 한다. 이 포크는 오버레이·
+미니패널을 크게 뜯어고쳐서, 그쪽을 건드리는 원본 커밋은 어차피 그대로 붙지 않는다.
 
 `upstream`은 **가져오기 전용**이다. 원본에 실수로 push 하는 길을 막으려고 push URL을 가짜 값으로
 바꿔 뒀다 (`git push upstream`이 "repository does not exist"로 실패한다).

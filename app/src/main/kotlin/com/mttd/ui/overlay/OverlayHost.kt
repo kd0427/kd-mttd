@@ -57,6 +57,12 @@ class OverlayHost(
 
     private var iconView: ComposeView? = null
     private var hudView: ComposeView? = null
+
+    // HUD 창-이동 중 위치를 소수점까지 들고 있는 앵커. hudParams.x/y 는 Int 라 매 스텝의
+    // Float 델타를 그때그때 반올림해 누적하면, 느리게 끌 때 버려지는 소수점이 쌓여 창이
+    // 손가락보다 뒤처진다.
+    private var hudDragAnchorX = 0f
+    private var hudDragAnchorY = 0f
     private var itemView: ComposeView? = null
 
     // 접힌 상태도 핵심 수치를 읽을 수 있는 가로 요약 바.
@@ -184,14 +190,23 @@ class OverlayHost(
                 onReset = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.resetSession()
                 },
+                // 창-이동은 View.setOnTouchListener 가 아니라 Compose 쪽 pointerInput 에서
+                // 처리한다. 본문을 덮는 스와이프 제스처가 터치 DOWN 을 먼저 가져가면 View
+                // 리스너는 이벤트를 아예 못 받는다 — HudView.kt 의 관련 주석 참조.
+                onDragStart = {
+                    hudDragAnchorX = hudParams.x.toFloat()
+                    hudDragAnchorY = hudParams.y.toFloat()
+                },
+                onDragBy = { dx, dy ->
+                    hudDragAnchorX += dx
+                    hudDragAnchorY += dy
+                    hudParams.x = hudDragAnchorX.toInt()
+                    hudParams.y = hudDragAnchorY.toInt()
+                    hudView?.let { v -> try { wm.updateViewLayout(v, hudParams) } catch (_: Throwable) {} }
+                },
+                onDragEnd = { ownScope.launch { prefs.setHudPosition(hudParams.x, hudParams.y) } },
             )
         }
-        attachDragBehavior(
-            view = hud,
-            params = hudParams,
-            onTap = null,       // HUD 는 Compose 버튼(접기 아이콘)이 자체적으로 클릭 처리
-            onDone = { x, y -> ownScope.launch { prefs.setHudPosition(x, y) } },
-        )
         try {
             wm.addView(hud, hudParams)
             hudView = hud

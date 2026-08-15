@@ -3,6 +3,8 @@ package com.mttd.ui.overlay
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +45,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -118,9 +122,28 @@ fun HudOverlay(
     onReset: () -> Unit = {},
     /** mTTD 자체를 종료한다. 되돌릴 수 없다 — 한 번 탭으로 바로 실행된다. */
     onExitApp: () -> Unit = {},
+    /** 창-이동 드래그 시작 — [OverlayHost] 가 현재 창 위치를 앵커로 캡처하는 용도. */
+    onDragStart: () -> Unit = {},
+    /** 창-이동 드래그 중 매 스텝 델타(px, 이전 이벤트 기준 증분). */
+    onDragBy: (dx: Float, dy: Float) -> Unit = { _, _ -> },
+    /** 창-이동 드래그 종료 — 위치 영속화 트리거용. */
+    onDragEnd: () -> Unit = {},
 ) {
     val session by sessionState.collectAsStateWithLifecycle()
     val prices = priceState?.collectAsStateWithLifecycle()?.value
+
+    // 0 = 수익 화면, 1 = 보유 아이템(가치) 화면. 거래소를 드나들 때는 지금까지처럼 자동으로
+    // 맞는 화면이 뜨고, 그 사이에는 좌우로 쓸어서 수동으로도 넘길 수 있다 — 거래소 밖에서
+    // 가방 가치를 확인할 길이 없던 것을 메운다.
+    var page by remember { mutableStateOf(if (session.inExchange) 1 else 0) }
+    LaunchedEffect(session.inExchange) {
+        page = if (session.inExchange) 1 else 0
+    }
+    val density = LocalDensity.current
+    val swipeThresholdPx = remember(density) { with(density) { 40.dp.toPx() } }
+    // 창-이동 롱프레스를 인식했을 때의 진동. 예전 View 기반 드래그(attachDragBehavior)가
+    // 주던 피드백이라, Compose 로 옮기면서 같이 가져온다.
+    val dragHaptics = LocalHapticFeedback.current
 
     // 시간이 실제로 흐를 때만 1 초 틱을 돌린다 (일시정지·집계 대기 중엔 정지).
     val ticking = session.active &&
@@ -178,24 +201,33 @@ fun HudOverlay(
                 }
                 Text(statusText, color = statusColor, fontSize = 10.sp)
                 Spacer(Modifier.fillMaxWidth().weight(1f))
+                // 화면이 둘(수익/가치)이라는 걸 알려주는 점. 스와이프는 발견하기 어려운
+                // 제스처라 표식이 없으면 있는 줄도 모른다.
+                Text(if (page == 0) "●○" else "○●", color = Color(0xFF64748B), fontSize = 8.sp)
+                Spacer(Modifier.width(8.dp))
                 // 버튼 사이 간격은 20dp — 24dp 버튼 사이에 그만큼의 무반응 구간을 둬서
                 // 옆 버튼 오터치를 막는다. 제목을 뺀 자리가 이 여백으로 갔다.
                 //
-                // 상한은 34dp 근처다. 패널 280dp - 좌우 여백 20dp = 260dp 에서 버튼 4 개(96dp)
-                // 와 가장 긴 상태 문구("● 로그·가방", 10sp 로 약 62dp)를 빼면 간격 셋에 쓸 수
-                // 있는 폭이 102dp 다. 더 벌리려면 상태 문구가 눌리지 않는지 기기에서 볼 것.
+                // 폭 예산(패널 280dp - 좌우 여백 20dp = 260dp): 가장 긴 상태 문구
+                // ("● 로그·가방", 10sp 로 약 62dp) + 페이지 점(약 16dp) + 여백 8dp +
+                // 버튼 4 개(96dp) + 간격 셋(60dp) = 약 242dp. 남는 폭이 18dp 뿐이라,
+                // 여기서 간격을 더 벌리거나 요소를 더 넣으려면 기기에서 확인이 필요하다.
                 HudMaterialIconButton(Icons.Filled.Settings, onOpenSettings)
                 Spacer(Modifier.width(20.dp))
-                if (session.inExchange) {
-                    // 거래소 안에서는 pause 가 자동 제어라 수동 토글 버튼이 필요 없고,
-                    // 새로고침은 리셋이 아니라 보유 아이템 가치 재계산이어야 한다.
-                    HudMaterialIconButton(Icons.Filled.Refresh, onRefreshHoldings)
-                } else {
+                // 일시정지는 거래소 여부로, 새로고침/초기화는 보고 있는 화면으로 가른다.
+                // 둘을 묶어두면 거래소 밖에서 "가치" 로 쓸어 넘겼을 때 초기화 버튼이 뜬다 —
+                // 보유 가치를 보면서 누르는 새로고침은 재계산이어야지 세션 폐기면 안 된다.
+                if (!session.inExchange) {
+                    // 거래소 안에서는 pause 가 자동 제어라 수동 토글 버튼이 필요 없다.
                     HudMaterialIconButton(
                         if (session.paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
                         onTogglePause,
                     )
                     Spacer(Modifier.width(20.dp))
+                }
+                if (page == 1) {
+                    HudMaterialIconButton(Icons.Filled.Refresh, onRefreshHoldings)
+                } else {
                     HudDangerIconButton(Icons.Filled.Refresh, "초기화", onReset)
                 }
                 Spacer(Modifier.width(20.dp))
@@ -204,7 +236,48 @@ fun HudOverlay(
 
             }
 
-            if (session.inExchange) {
+            // 스와이프(화면 전환)와 창-이동(길게 눌러 드래그)은 헤더를 뺀 이 본문 영역에만
+            // 건다. 헤더는 탭하면 접히는 영역이라(위 Row 의 clickable), 같은 자리에 롱프레스
+            // 드래그를 얹으면 접기와 창-이동이 같은 포인터 스트림을 두고 겨루게 된다.
+            //
+            // 창-이동은 예전엔 OverlayHost 가 View.setOnTouchListener 로 처리했는데, 스와이프
+            // pointerInput 이 카드를 덮으면 Compose 가 터치 DOWN 을 먼저 가져가 버려서 View
+            // 리스너가 이벤트를 아예 못 받는다(펼친 HUD 가 안 움직이는 버그). 두 제스처를 같은
+            // pointerInput 파이프라인에 순서대로 두면, 앞쪽이 소비했을 때 뒤쪽이 알아서 물러난다.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        var dragTotal = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { dragTotal = 0f },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                dragTotal += dragAmount
+                            },
+                            onDragEnd = {
+                                if (dragTotal <= -swipeThresholdPx) page = 1
+                                else if (dragTotal >= swipeThresholdPx) page = 0
+                            },
+                        )
+                    }
+                    .pointerInput(onDragStart, onDragBy, onDragEnd) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                dragHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onDragStart()
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                onDragBy(dragAmount.x, dragAmount.y)
+                            },
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragEnd() },
+                        )
+                    },
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+            if (page == 1) {
                 HoldingsBody(session.holdings)
             } else {
                 when {
@@ -275,6 +348,7 @@ fun HudOverlay(
                         }
                     }
                 }
+            }
             }
         }
     }

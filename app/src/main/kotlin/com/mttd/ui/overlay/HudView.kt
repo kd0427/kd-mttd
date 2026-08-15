@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -144,6 +145,15 @@ fun HudOverlay(
     // 창-이동 롱프레스를 인식했을 때의 진동. 예전 View 기반 드래그(attachDragBehavior)가
     // 주던 피드백이라, Compose 로 옮기면서 같이 가져온다.
     val dragHaptics = LocalHapticFeedback.current
+    // 창-이동이 시작되면 본문 목록의 세로 스크롤을 잠근다.
+    //
+    // 창-이동 제스처는 본문 Column(조상)에 걸려 있고 목록의 verticalScroll 은 그 자손이다.
+    // Compose 의 Main 패스는 자손이 먼저 받으므로, 롱프레스가 성립해 창이 따라오기 시작해도
+    // 세로로 8dp 쯤 끌면 목록이 자기 슬롭을 채워 먼저 consume 해 버린다 — 조상의 드래그 루프는
+    // 소비된 이벤트를 보고 onDragCancel 로 빠진다. 햅틱까지 울린 뒤 창이 멈추고 목록만
+    // 스크롤되는 회귀다(예전 View 기반 attachDragBehavior 는 터치를 통째로 가로채서 이런 일이
+    // 없었다). 롱프레스가 성립한 뒤에는 스크롤을 아예 꺼서 조상이 이기게 한다.
+    var windowDragging by remember { mutableStateOf(false) }
 
     // 시간이 실제로 흐를 때만 1 초 틱을 돌린다 (일시정지·집계 대기 중엔 정지).
     val ticking = session.active &&
@@ -231,7 +241,10 @@ fun HudOverlay(
                 if (page == 1) {
                     HudMaterialIconButton(Icons.Filled.Refresh, onRefreshHoldings)
                 } else {
-                    HudDangerIconButton(Icons.Filled.Refresh, "초기화", onReset)
+                    // 새로고침(가치 화면, 무해)과 아이콘까지 같으면 안 된다. 거래소 안에서는
+                    // 일시정지 버튼이 빠져서 둘이 헤더의 같은 자리에 오는데, 화면만 넘기면
+                    // 같은 자리 같은 모양이 무해한 재계산에서 세션 폐기로 바뀌어 버린다.
+                    HudDangerIconButton(Icons.Filled.Delete, "초기화", onReset)
                 }
                 Spacer(Modifier.width(16.dp))
                 HudDangerIconButton(Icons.AutoMirrored.Filled.Logout, "mTTD 종료", onExitApp)
@@ -267,6 +280,7 @@ fun HudOverlay(
                     .pointerInput(onDragStart, onDragBy, onDragEnd) {
                         detectDragGesturesAfterLongPress(
                             onDragStart = {
+                                windowDragging = true
                                 dragHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onDragStart()
                             },
@@ -274,14 +288,14 @@ fun HudOverlay(
                                 change.consume()
                                 onDragBy(dragAmount.x, dragAmount.y)
                             },
-                            onDragEnd = { onDragEnd() },
-                            onDragCancel = { onDragEnd() },
+                            onDragEnd = { windowDragging = false; onDragEnd() },
+                            onDragCancel = { windowDragging = false; onDragEnd() },
                         )
                     },
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
             if (page == 1) {
-                HoldingsBody(session.holdings)
+                HoldingsBody(session.holdings, scrollEnabled = !windowDragging)
             } else {
                 when {
                     prices != null && prices.loading -> Text(
@@ -343,7 +357,7 @@ fun HudOverlay(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = MAX_LIST_HEIGHT)
-                            .verticalScroll(rememberScrollState()),
+                            .verticalScroll(rememberScrollState(), enabled = !windowDragging),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         for (p in session.recentPickups) {
@@ -362,7 +376,11 @@ fun HudOverlay(
  * [SessionAggregator.enterExchange] 가 진입 시점에 [SessionState.holdings] 를 채운다.
  */
 @Composable
-private fun HoldingsBody(holdings: List<com.mttd.domain.models.PickupSummary>) {
+private fun HoldingsBody(
+    holdings: List<com.mttd.domain.models.PickupSummary>,
+    /** 창-이동 중에는 false — [HudOverlay] 의 windowDragging 주석 참조. */
+    scrollEnabled: Boolean = true,
+) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             "🏪 보유 아이템 가치",
@@ -387,7 +405,7 @@ private fun HoldingsBody(holdings: List<com.mttd.domain.models.PickupSummary>) {
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = HOLDINGS_LIST_HEIGHT)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState(), enabled = scrollEnabled),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             for (p in holdings) {

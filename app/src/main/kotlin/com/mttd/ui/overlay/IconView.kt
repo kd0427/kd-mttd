@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -211,7 +212,10 @@ fun IconOverlay(
         gap + selectedControls.fold(0.dp) { acc, c -> acc + c.width } +
             controlGap * (selectedControls.size - 1)
     }
-    val fixedWidth = 48.dp + statusToMetricGap + controlsWidth +
+    // panelPadding: 바깥 Box 의 좌우 패딩(5dp x 2). maxPanelWidth 는 패널 **바깥** 폭 기준이라
+    // 이걸 빼놓으면 상한에 걸리는 조합에서 패널이 화면 여백을 10dp 넘어선다.
+    val panelPadding = 10.dp
+    val fixedWidth = panelPadding + 48.dp + statusToMetricGap + controlsWidth +
         gap * (selectedMetrics.size - 1)
     val metricWidth = ((maxPanelWidth - fixedWidth).value / selectedMetrics.size)
         .coerceAtLeast(1f)
@@ -352,7 +356,7 @@ private fun SummaryResetButton(onReset: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            imageVector = Icons.Filled.Refresh,
+            imageVector = Icons.Filled.Delete,
             contentDescription = "두 번 눌러 초기화",
             tint = Color(0xFFF87171),
             modifier = Modifier.size(16.dp),

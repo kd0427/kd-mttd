@@ -12,27 +12,48 @@ git remote add origin https://github.com/GITHUB_ID/kd-mttd.git
 git push -u origin main
 ```
 
-원본 변경을 검토할 때는 다음을 사용한다.
+원본 변경을 검토할 때는 다음을 사용한다. `a67ccaf` 는 **마지막으로 검토를 끝낸 원본 커밋**이다.
 
 ```bash
 git fetch upstream
-git log --oneline aa6bbd4..upstream/main
+git log --oneline a67ccaf..upstream/main
 ```
+
+> 한 배치를 반영(또는 검토 후 스킵)할 때마다 위 해시를 그때의 `upstream/main` 끝으로 갱신하고,
+> 아래 표에 결과를 남긴다. **이걸 안 하면 이미 처리한 커밋이 계속 목록에 남는다** — 손으로 옮긴
+> 커밋은 patch-id 가 달라져서 `--cherry-pick` 으로도 걸러지지 않는다.
 
 ### ⚠️ `main..upstream/main` 과 `git merge upstream/main` 은 쓰지 않는다
 
 2026-08-15 에 커밋 메시지에서 `Co-Authored-By: Claude` 트레일러를 걷어내려고 전체 히스토리를
 재작성했다. 해시가 전부 바뀌어서 **git 이 원본과 공유하던 이력을 더 이상 알아보지 못한다.**
-merge-base 가 `aa6bbd4`(v0.3.4) 에서 `b9a9590`(v0.3.0) 으로 후퇴했고, 그 결과
+merge-base 가 `aa6bbd4`(0.3.4 버전 범프 커밋 — `v0.3.4` **태그**가 가리키는 커밋은 아니다)
+에서 `b9a9590`(v0.3.0) 으로 후퇴했고, 그 결과
 
-- `git log main..upstream/main` 은 실제 신규 8 개를 **27 개로 부풀려 보여준다.**
+- `git log main..upstream/main` 은 당시 실제 신규 8 개를 **27 개로 부풀려 보여줬다.**
 - `git merge upstream/main` 은 **이미 반영된 19 개를 다시 얹으려 든다.**
+  (`git log --left-right --cherry-pick main...upstream/main` 으로 실측한 값이다.)
 
-커밋이 사라진 건 아니다 — `aa6bbd4` 는 `upstream/main` 을 통해 그대로 살아 있다. 원본 이력을
-훑을 때 **실질 기준점을 `aa6bbd4` 로 잡으면** 정확한 목록이 나온다.
+커밋이 사라진 건 아니다 — `aa6bbd4` 는 `upstream/main` 을 통해 그대로 살아 있다. 이 후퇴는
+영구적이므로 위의 "마지막 검토 지점" 방식을 계속 쓴다.
 
 반영은 merge 가 아니라 필요한 커밋만 골라 손으로 옮기는 방식으로 한다. 이 포크는 오버레이·
 미니패널을 크게 뜯어고쳐서, 그쪽을 건드리는 원본 커밋은 어차피 그대로 붙지 않는다.
+
+### 검토 이력
+
+**`aa6bbd4` → `a67ccaf`** (2026-08-15, 원본 신규 8 개)
+
+| 원본 커밋 | 내용 | 처리 |
+| --- | --- | --- |
+| `02aff25` | 판매 아이템이 보유 목록에 유령으로 남는 문제 | 반영 (cherry-pick) |
+| `59e07c5` | 캐릭터 빌드 내보내기를 로그 릴레이로 전환 | 반영 (cherry-pick + 충돌 해결) |
+| `36e04d3` | 수익/가치 스와이프, 버튼을 화면 기준으로 구분 | 재구현 (헤더가 갈라져 그대로 안 붙음) |
+| `1d57478` | 펼친 HUD 가 드래그로 안 움직이던 문제 | 재구현 (위와 한 묶음) |
+| `bfb3345` | Shizuku 없이 무선 adb 로 붙는 direct 플레이버 | 스킵 — Shizuku 로 간다 |
+| `b53cd7f` | direct 플레이버 상주 데몬 | 스킵 (위와 같은 이유) |
+| `a67ccaf` | direct 데몬 재접속·자동 정리 | 스킵 (위와 같은 이유) |
+| `736ef28` | 원본 0.3.5 버전 범프 | 해당 없음 — 이 포크는 버전을 따로 매긴다 |
 
 `upstream`은 **가져오기 전용**이다. 원본에 실수로 push 하는 길을 막으려고 push URL을 가짜 값으로
 바꿔 뒀다 (`git push upstream`이 "repository does not exist"로 실패한다).

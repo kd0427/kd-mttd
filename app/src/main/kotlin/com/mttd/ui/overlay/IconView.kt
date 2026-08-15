@@ -280,6 +280,10 @@ fun IconOverlay(
                 when (control) {
                     MiniPanelControl.PAUSE -> SummaryPauseButton(
                         paused = session.paused,
+                        // 거래소 안에서는 일시정지가 자동 제어다. 상세 HUD 는 아예 버튼을
+                        // 숨기지만(HudView 헤더), 여기서는 폭 예산이 버튼 개수로 미리
+                        // 계산돼 있어 빼면 칸이 어긋난다 — 자리는 두고 흐리게만 만든다.
+                        enabled = !session.inExchange,
                         onClick = onTogglePause,
                     )
                     MiniPanelControl.RESET -> SummaryResetButton(onReset)
@@ -365,18 +369,22 @@ private fun SummaryResetButton(onReset: () -> Unit) {
 }
 
 @Composable
-private fun SummaryPauseButton(paused: Boolean, onClick: () -> Unit) {
+private fun SummaryPauseButton(paused: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(24.dp)
             .background(Color(0xFF1E293B), RoundedCornerShape(7.dp))
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
             contentDescription = if (paused) "재생" else "일시정지",
-            tint = if (paused) Color(0xFF4ADE80) else Color(0xFFFBBF24),
+            tint = when {
+                !enabled -> Color(0xFF475569)
+                paused -> Color(0xFF4ADE80)
+                else -> Color(0xFFFBBF24)
+            },
             modifier = Modifier.size(16.dp),
         )
     }

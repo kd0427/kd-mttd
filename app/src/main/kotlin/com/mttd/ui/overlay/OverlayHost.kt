@@ -64,6 +64,9 @@ class OverlayHost(
     private var hudDragAnchorX = 0f
     private var hudDragAnchorY = 0f
     private var itemView: ComposeView? = null
+    // 아이템 패널도 같은 이유로 소수점 앵커를 따로 들고 있다.
+    private var itemDragAnchorX = 0f
+    private var itemDragAnchorY = 0f
 
     // 접힌 상태도 핵심 수치를 읽을 수 있는 가로 요약 바.
     private val iconParams = defaultParams(
@@ -109,6 +112,9 @@ class OverlayHost(
         hudParams.x = savedHudX
         hudParams.y = savedHudY
         hudParams.alpha = alpha
+        // 저장된 좌표는 그때의 화면 크기 기준이라 지금 화면 밖일 수 있다.
+        clampToScreen(iconParams)
+        clampToScreen(hudParams)
 
         mountIcon()
 
@@ -204,7 +210,12 @@ class OverlayHost(
                     hudParams.y = hudDragAnchorY.toInt()
                     hudView?.let { v -> try { wm.updateViewLayout(v, hudParams) } catch (_: Throwable) {} }
                 },
-                onDragEnd = { ownScope.launch { prefs.setHudPosition(hudParams.x, hudParams.y) } },
+                onDragEnd = {
+                    // 화면 밖에 놓고 뗀 좌표를 그대로 저장하면 다음에 열 때도 밖에 있다.
+                    clampToScreen(hudParams)
+                    hudView?.let { v -> try { wm.updateViewLayout(v, hudParams) } catch (_: Throwable) {} }
+                    ownScope.launch { prefs.setHudPosition(hudParams.x, hudParams.y) }
+                },
             )
         }
         try {
@@ -243,14 +254,33 @@ class OverlayHost(
         } else {
             itemParams.x = savedX
             itemParams.y = savedY
+            clampToScreen(itemParams)
         }
-        val item = buildComposeView { ItemOverlay(sessionState) }
-        attachDragBehavior(
-            view = item,
-            params = itemParams,
-            onTap = null,
-            onDone = { x, y -> ownScope.launch { prefs.setItemPanelPosition(x, y) } },
-        )
+        // 창-이동은 HUD 와 마찬가지로 Compose 쪽 pointerInput 에서 처리한다.
+        // View.setOnTouchListener(attachDragBehavior) 로는 목록의 verticalScroll 이 터치를
+        // 먼저 가져가는 스크롤 영역에서 창이 안 움직였다 — HudView.kt 의 관련 주석 참조.
+        val item = buildComposeView {
+            ItemOverlay(
+                sessionState = sessionState,
+                netValueFlow = prefs.miniPanelNetValue,
+                onDragStart = {
+                    itemDragAnchorX = itemParams.x.toFloat()
+                    itemDragAnchorY = itemParams.y.toFloat()
+                },
+                onDragBy = { dx, dy ->
+                    itemDragAnchorX += dx
+                    itemDragAnchorY += dy
+                    itemParams.x = itemDragAnchorX.toInt()
+                    itemParams.y = itemDragAnchorY.toInt()
+                    itemView?.let { v -> try { wm.updateViewLayout(v, itemParams) } catch (_: Throwable) {} }
+                },
+                onDragEnd = {
+                    clampToScreen(itemParams)
+                    itemView?.let { v -> try { wm.updateViewLayout(v, itemParams) } catch (_: Throwable) {} }
+                    ownScope.launch { prefs.setItemPanelPosition(itemParams.x, itemParams.y) }
+                },
+            )
+        }
         try {
             wm.addView(item, itemParams)
             itemView = item
@@ -272,6 +302,12 @@ class OverlayHost(
 
     /** 회전 시 Compose가 새 화면 폭으로 다시 측정되도록 미니패널을 마운트한다. */
     fun onDisplayConfigurationChanged() {
+        // 화면이 좁아지면 예전 좌표가 화면 밖이 된다. 지금 떠 있는 창을 전부 끌어들인다.
+        clampToScreen(iconParams)
+        clampToScreen(hudParams)
+        clampToScreen(itemParams)
+        hudView?.let { v -> try { wm.updateViewLayout(v, hudParams) } catch (_: Throwable) {} }
+        itemView?.let { v -> try { wm.updateViewLayout(v, itemParams) } catch (_: Throwable) {} }
         if (iconView == null) return
         iconView?.let { safeRemove(it) }
         iconView = null
@@ -378,6 +414,8 @@ class OverlayHost(
                     longPressRunnable = null
                     when {
                         longPressed -> {
+                            clampToScreen(params)
+                            try { wm.updateViewLayout(v, params) } catch (_: Throwable) {}
                             onDone(params.x, params.y)
                             true
                         }
@@ -400,10 +438,33 @@ class OverlayHost(
     private fun systemDisplayWidthPx(): Int =
         android.content.res.Resources.getSystem().displayMetrics.widthPixels
 
+    private fun systemDisplayHeightPx(): Int =
+        android.content.res.Resources.getSystem().displayMetrics.heightPixels
+
+    /**
+     * 창의 좌상단이 화면 안에 남도록 좌표를 잡아준다.
+     *
+     * `FLAG_LAYOUT_NO_LIMITS` 라 시스템이 안 잡아주고, 저장된 좌표는 그때의 화면 크기
+     * 기준이다. 가로에서 오른쪽 끝에 두고 세로로 바뀌면 창이 통째로 화면 밖으로 나가는데,
+     * 미니패널은 상세 패널을 여는 **유일한 입구**라 그 상태에선 오버레이를 손댈 방법이
+     * 없어진다 (좌표가 prefs 에 남아 껐다 켜도 그대로).
+     *
+     * 창 폭은 WRAP_CONTENT 인 경우 알 수 없으므로 "폭 전체를 화면 안에" 가 아니라
+     * "적어도 [VISIBLE_MARGIN_DP] 만큼은 화면 안에" 로 잡는다 — 일부러 살짝 걸쳐 두는
+     * 배치는 그대로 허용하면서, 잡을 곳이 아예 없어지는 것만 막는다.
+     */
+    private fun clampToScreen(params: WindowManager.LayoutParams) {
+        val margin = dip(VISIBLE_MARGIN_DP)
+        params.x = params.x.coerceIn(0, (systemDisplayWidthPx() - margin).coerceAtLeast(0))
+        params.y = params.y.coerceIn(0, (systemDisplayHeightPx() - margin).coerceAtLeast(0))
+    }
+
 
     companion object {
         private const val TAG = "mTTD.Overlay"
         private const val TOUCH_SLOP = 20f
         private const val LONG_PRESS_MS = 400L
+        /** 창이 화면 안에 반드시 남겨야 하는 최소 크기(dp). 잡아서 끌 수 있을 정도. */
+        private const val VISIBLE_MARGIN_DP = 56
     }
 }

@@ -71,13 +71,50 @@ private val HOLDINGS_LIST_HEIGHT = ROW_HEIGHT * 10
 
 /** 미니패널의 `템` 버튼에서 여는, 현재 맵 획득 목록 전용 축약 패널. */
 @Composable
-fun ItemOverlay(sessionState: StateFlow<SessionState>) {
+fun ItemOverlay(
+    sessionState: StateFlow<SessionState>,
+    /**
+     * 세후(실수령) 표시 설정. 미니패널과 **같은 값**을 써야 한다 — 이 패널은 미니패널의
+     * `템` 버튼으로 열려 바로 옆에 붙어 뜨는데, 한쪽만 세금을 뺀 값을 보여주면 같은
+     * "이번 맵" 이 두 숫자로 보인다.
+     */
+    netValueFlow: kotlinx.coroutines.flow.Flow<Boolean>? = null,
+    /** 창-이동 드래그 시작 — [OverlayHost] 가 현재 창 위치를 앵커로 캡처하는 용도. */
+    onDragStart: () -> Unit = {},
+    /** 창-이동 드래그 중 매 스텝 델타(px, 이전 이벤트 기준 증분). */
+    onDragBy: (dx: Float, dy: Float) -> Unit = { _, _ -> },
+    /** 창-이동 드래그 종료 — 위치 영속화 트리거용. */
+    onDragEnd: () -> Unit = {},
+) {
     val session by sessionState.collectAsStateWithLifecycle()
+    val showNet = netValueFlow?.collectAsStateWithLifecycle(initialValue = false)?.value ?: false
+    val mapValue = if (showNet) session.netCurrentMapValue else session.currentMapValue
+    val dragHaptics = LocalHapticFeedback.current
+    // 창-이동 중에는 목록 스크롤을 잠근다 — 이유는 [HudOverlay] 의 windowDragging 주석 참조.
+    var windowDragging by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF0F172A).copy(alpha = 0.9f), RoundedCornerShape(12.dp))
             .border(1.dp, Color(0xFFE2E8F0).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            // 창-이동은 HUD 와 같은 방식으로 Compose 쪽에서 처리한다. 예전엔 OverlayHost 가
+            // View.setOnTouchListener(attachDragBehavior) 로 잡았는데, 목록의 verticalScroll 이
+            // 터치를 먼저 가져가서 스크롤 영역에서는 창이 아예 안 움직였다.
+            .pointerInput(onDragStart, onDragBy, onDragEnd) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = {
+                        windowDragging = true
+                        dragHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onDragStart()
+                    },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        onDragBy(dragAmount.x, dragAmount.y)
+                    },
+                    onDragEnd = { windowDragging = false; onDragEnd() },
+                    onDragCancel = { windowDragging = false; onDragEnd() },
+                )
+            }
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -85,10 +122,10 @@ fun ItemOverlay(sessionState: StateFlow<SessionState>) {
             Text("획득 아이템", color = Color(0xFFCBD5E1), fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
             Text(
-                formatFire(session.currentMapValue),
+                formatFire(mapValue),
                 color = when {
-                    session.currentMapValue < 0 -> Color(0xFFF87171)
-                    session.currentMapValue > 0 -> Color(0xFF4ADE80)
+                    mapValue < 0 -> Color(0xFFF87171)
+                    mapValue > 0 -> Color(0xFF4ADE80)
                     else -> Color(0xFF94A3B8)
                 },
                 fontSize = 10.sp,
@@ -103,7 +140,7 @@ fun ItemOverlay(sessionState: StateFlow<SessionState>) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = ROW_HEIGHT * 5)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(rememberScrollState(), enabled = !windowDragging),
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 for (pickup in session.recentPickups) PickupRow(pickup)
@@ -139,6 +176,13 @@ fun HudOverlay(
     var page by remember { mutableStateOf(if (session.inExchange) 1 else 0) }
     LaunchedEffect(session.inExchange) {
         page = if (session.inExchange) 1 else 0
+    }
+    // 가치 화면으로 넘어올 때마다 보유 아이템을 다시 계산한다. 예전엔 거래소 진입
+    // (SessionAggregator.enterExchange) 만 계산을 걸어서, 거래소를 한 번도 안 들렀으면
+    // 탭이나 스와이프로 "가치" 를 열어도 목록이 비어 있었다.
+    // 슬롯 수량(slotLastCount)은 거래소 밖에서도 계속 최신이라 언제 불러도 안전하다.
+    LaunchedEffect(page) {
+        if (page == 1) onRefreshHoldings()
     }
     val density = LocalDensity.current
     val swipeThresholdPx = remember(density) { with(density) { 40.dp.toPx() } }

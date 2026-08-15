@@ -78,6 +78,18 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     fun currentLoadout(): com.mttd.data.export.CharacterLoadout? = characterLoadoutTracker.latestLoadout
     fun currentLoadoutSyncedAtMs(): Long = characterLoadoutTracker.latestSyncAtMs
 
+    /**
+     * 실제 내보내기(로그 릴레이)에 쓸 원문 슬라이스 — `GetPlayerData` 시작 지점부터 지금 파일
+     * 끝까지를 [LogPoller.readRange] 로 다시 읽어온다. [CharacterLoadoutTracker] 클래스 doc의
+     * "원문 재전송" 섹션 참조. 아직 스냅샷을 못 봤거나(오프셋 없음), 폴러가 안 돌고 있거나, 그
+     * 시점 이후 파일이 안 자랐으면 null.
+     */
+    suspend fun currentLoadoutExportBlock(): String? {
+        val startOffset = characterLoadoutTracker.lastSnapshotStartOffset ?: return null
+        val bytes = poller?.readRange(startOffset) ?: return null
+        return bytes.toString(Charsets.UTF_8)
+    }
+
     val priceState get() = priceRepo.state
     fun priceRepository(): PriceRepository = priceRepo
     /** 경매장에서 직접 조회한 시세 (스냅샷보다 우선). */
@@ -368,13 +380,15 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             p.lines.collect { line ->
                 // SharedFlow replay는 진단 화면의 구독 교체 타이밍에 비어 보일 수 있다.
                 // 상태로 마지막 10줄을 직접 유지해, 읽은 로그와 화면이 반드시 일치하게 한다.
-                _recentLines.value = (_recentLines.value + line).takeLast(MAX_RECENT_DEBUG_LINES)
+                // 폴러가 이제 offset 을 같이 실어 보내므로(로그 릴레이가 스냅샷 시작 지점을
+                // 기억해야 한다) 진단 화면에는 원문만 뽑아 넣는다.
+                _recentLines.value = (_recentLines.value + line.text).takeLast(MAX_RECENT_DEBUG_LINES)
                 // 라인 단위 관측 (맵 코드네임 등 assembler 밖 컨텍스트)
-                aggregator.observeLine(line)
-                characterLoadoutTracker.observeLine(line)
+                aggregator.observeLine(line.text)
+                characterLoadoutTracker.observeLine(line.text, line.offset)
                 // 필터 통과분만 assembler 에 공급
-                if (!LogLineFilter.shouldExclude(line)) {
-                    assembler.feed(line)?.let { msg -> aggregator.consume(msg) }
+                if (!LogLineFilter.shouldExclude(line.text)) {
+                    assembler.feed(line.text)?.let { msg -> aggregator.consume(msg) }
                 }
             }
         }

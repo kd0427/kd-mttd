@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * 게임 내 경매장에서 **직접 조회한** 시세.
@@ -45,7 +46,9 @@ class ObservedPriceStore {
             observedAtMs = observedAtMs,
             currencyId = currencyId,
         )
-        _prices.value = _prices.value + (itemId to entry)
+        // update{} (CAS) 로 쓴다 — 기록은 로그 파싱 스레드, 비우기는 UI 스레드라
+        // `value = value + x` 로 읽고-쓰면 방금 비운 맵이 통째로 되살아날 수 있다.
+        _prices.update { it + (itemId to entry) }
         Log.i(TAG, "observed $itemId avg=%.4f from ${unitPrices.size} listings".format(avg))
     }
 

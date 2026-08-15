@@ -47,8 +47,15 @@ class PriceRepository(
     suspend fun switchSource(s: PriceSource): Result<Int> {
         if (_source.value == s && _state.value.itemsWithPrice > 1) return Result.success(0)
         _source.value = s
-        _state.value = State(source = s)   // 이전 소스 값이 섞이지 않게 초기화
-        return refreshLatest(forceRefresh = true)
+        // 이전 가격 맵은 **새 스냅샷이 도착할 때 통째로** 교체된다 (refresh/refreshTtd 는 성공
+        // 시에만 State 를 갈아끼우고, 실패해도 priceById 를 비우지 않는다). 예전엔 여기서 먼저
+        // 비웠는데, fetch 가 끝나기 전에 주운 아이템이 가치 0 으로 굳어 회차에 저장됐다 —
+        // 픽업 가치는 픽업 시점에 한 번만 계산되므로 나중에 시세가 와도 소급되지 않는다.
+        // 두 소스의 가치 단위는 같아서(PriceSource 주석) 잠깐 이전 시세로 계산돼도 문제없다.
+        _state.value = _state.value.copy(loading = true, lastError = null)
+        val r = refreshLatest(forceRefresh = true)
+        if (r.isFailure) _state.value = _state.value.copy(loading = false)
+        return r
     }
 
     /**
@@ -125,17 +132,28 @@ class PriceRepository(
         var s = start
         while (s <= MAX_SEASON) {
             val r = probe(s)
-            if (r == null) break
+            if (r == null) {
+                // probe 가 null 인 이유는 둘이다: "그런 시즌 없음"(정상 종료 조건) 과
+                // 네트워크/파싱 오류. refresh 는 오류일 때만 lastError 를 채우므로 그걸로
+                // 가른다 — 오프라인인데 아래로 5 시즌을 더 훑으면 전부 같은 이유로 실패해
+                // 한 번의 갱신이 HTTP 6 회가 된다.
+                lastError = _state.value.lastError?.let { RuntimeException(it) }
+                break
+            }
             bestSeason = s; bestCount = r
             s += SEASON_STEP
         }
 
         // 2) start 자체가 이미 종료된 시즌이면 아래로 내려가며 찾는다.
-        if (bestSeason == null) {
+        //    네트워크 오류로 멈춘 경우엔 내려가 봐야 소용없으므로 건너뛴다.
+        if (bestSeason == null && lastError == null) {
             s = start - SEASON_STEP
             while (s >= MIN_SEASON) {
                 val r = probe(s)
                 if (r != null) { bestSeason = s; bestCount = r; break }
+                // 내려가는 중에 회선이 끊겨도 마찬가지 — 남은 시즌을 계속 두드리지 않는다.
+                val err = _state.value.lastError
+                if (err != null) { lastError = RuntimeException(err); break }
                 s -= SEASON_STEP
             }
         }

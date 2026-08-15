@@ -83,6 +83,12 @@ class SessionAggregator(
             currentMapId = prev.currentMapId,
             currentMapName = prev.currentMapName,
             lastEnterAreaMs = prev.lastEnterAreaMs,
+            // 일시정지·거래소도 "지금 상태" 다. 리셋이 이걸 지우면 중지해 둔 세션이 소리 없이
+            // 다시 돌고, 거래소 안에서 리셋했을 땐 화면(거래소)과 상태가 어긋난 채로 남는다
+            // — 거래소를 닫는 신호는 한 번뿐이라 그 뒤로는 스스로 맞춰지지 않는다.
+            paused = prev.paused,
+            pausedSinceMs = if (prev.paused) System.currentTimeMillis() else null,
+            inExchange = prev.inExchange,
         )
         slotLastCount.clear()
         slotKeyByPosition.clear()
@@ -96,7 +102,9 @@ class SessionAggregator(
         currentRunMapName = prev.currentMapName
         nextRunId = 1
         awaitingMapArea = false
-        pausedByExchange = false
+        // 거래소 상태를 그대로 들고 가므로, "이 pause 는 우리가 건 것" 이라는 표시도 같이
+        // 유지해야 거래소를 닫을 때 자동으로 풀린다.
+        pausedByExchange = pausedByExchange && prev.inExchange
     }
 
     fun pauseSession() {
@@ -104,8 +112,8 @@ class SessionAggregator(
             if (it.paused) it
             else {
                 val now = System.currentTimeMillis()
-                val mapChunk = it.mapElapsedSinceMs?.let { since -> now - since } ?: 0
-                val currentMapChunk = it.currentMapElapsedSinceMs?.let { since -> now - since } ?: 0
+                val mapChunk = it.mapElapsedSinceMs?.let { since -> (now - since).coerceAtLeast(0) } ?: 0
+                val currentMapChunk = it.currentMapElapsedSinceMs?.let { since -> (now - since).coerceAtLeast(0) } ?: 0
                 it.copy(
                     paused = true,
                     pausedSinceMs = now,
@@ -123,7 +131,7 @@ class SessionAggregator(
             if (!it.paused) return@update it
             val since = it.pausedSinceMs ?: return@update it
             val now = System.currentTimeMillis()
-            val chunk = now - since
+            val chunk = (now - since).coerceAtLeast(0)
             it.copy(
                 paused = false,
                 pausedSinceMs = null,
@@ -546,9 +554,19 @@ class SessionAggregator(
             if (code.startsWith("LoginScene") || mapNames?.isTown(code) == true) {
                 latestMapCode = null
                 awaitingMapArea = false
+                // 로그인 화면에 있다 = 거래소 안일 수 없다. 거래소를 닫는 신호(Destory)는
+                // 거래소 화면에서 게임이 죽으면 로그에 안 남는데, 그러면 inExchange 가 참으로
+                // 굳어 재로그인 후 파밍 집계가 통째로 막힌다.
+                // (마을은 여기서 안 푼다 — 경매장은 마을 위에 뜨는 화면이라 거래 중에도
+                //  마을 MapName 이 올 수 있고, 그때 풀면 거래가 수익으로 잡힌다.)
+                if (code.startsWith("LoginScene")) exitExchange()
                 setMapPresence(false, "MapName=$code")
             } else if (code != latestMapCode && code.isNotEmpty()) {
                 latestMapCode = code
+                // 맵 밖인데 맵 이름이 관측됐다 = 재입장 후보 신호. 지금은 이름만 기억하고
+                // 시계는 안 켜는데, "재입장 시 무엇이 오는가" 를 알아야 그게 맞는지 판단할 수
+                // 있어서 진단 기록에 남긴다.
+                if (!_state.value.inMap) recordPresence(false, "맵 이름 관측 — 맵 밖 유지(MapName=$code)")
             }
         }
     }
@@ -732,6 +750,8 @@ class SessionAggregator(
 
     /** 새 맵 시작 — 진행 중이던 회차를 닫아 기록으로 넘기고, "이번 맵" 을 비운다. */
     private fun startNewRun() {
+        // 맵을 열었다 = 거래소 밖이다. 거래소 종료 라인을 못 받은 채로 굳은 상태를 여기서도 푼다.
+        exitExchange()
         awaitingMapArea = true
         // 맵 열기는 전환이 없어도 반드시 남긴다. setMapPresence 는 inMap 이 실제로 바뀔 때만
         // 기록하는데, 맵 밖에서 맵을 열면 이미 false 라 아무 흔적이 안 남는다 — 그러면 진단
@@ -760,13 +780,17 @@ class SessionAggregator(
     }
 
     /** 맵 안/밖 전환 시 맵 전용 시계를 확정하거나 재개한다. */
+    /**
+     * 맵 안/밖 전환. 누적 시간에 더하는 조각은 전부 `coerceAtLeast(0)` 을 거친다 —
+     * NTP 보정 등으로 기기 시계가 뒤로 가면 조각이 음수가 되어 이미 쌓아둔 시간이 깎인다.
+     */
     private fun setMapPresence(inMap: Boolean, reason: String) {
         val before = _state.value.inMap
         _state.update { state ->
             if (state.inMap == inMap) return@update state
             val now = System.currentTimeMillis()
-            val chunk = state.mapElapsedSinceMs?.let { now - it } ?: 0
-            val currentMapChunk = state.currentMapElapsedSinceMs?.let { now - it } ?: 0
+            val chunk = state.mapElapsedSinceMs?.let { (now - it).coerceAtLeast(0) } ?: 0
+            val currentMapChunk = state.currentMapElapsedSinceMs?.let { (now - it).coerceAtLeast(0) } ?: 0
             state.copy(
                 inMap = inMap,
                 mapElapsedAccumulatedMs = state.mapElapsedAccumulatedMs + chunk,
@@ -815,7 +839,10 @@ class SessionAggregator(
         if (currentRunId >= 0) return
         currentRunId = nextRunId++
         currentRunStartedAtMs = atMs
-        currentRunMapName = null
+        // 맵을 열어서 시작한 회차가 아니라(그건 startNewRun 이 null 로 비운다) 맵 안에서
+        // 암묵적으로 열리는 회차다. 지금 서 있는 맵 이름을 그대로 단다 — 예전엔 null 로 비워
+        // 다음 EnterArea 가 올 때까지 이름 없는 회차로 보였다(진행 중 회차를 지운 직후 등).
+        currentRunMapName = _state.value.currentMapName
     }
 
     private fun buildRun(endedAtMs: Long?): MapRun = MapRun(
@@ -918,7 +945,12 @@ class SessionAggregator(
         ensureCurrentRun(timestampMs)
         // 일시정지 중이면 slot 상태만 갱신하고 픽업 카운트 안 함.
         // slotLastCount 는 계속 최신값 유지해야 resume 후 다음 Modfy delta 가 정확.
-        if (_state.value.paused) {
+        //
+        // 거래소 안에서는 paused 와 **무관하게** 카운트하지 않는다. 거래소 진입이 자동으로
+        // 거는 pause 하나에만 기대면, 유저가 "중지중" 표시를 보고 재생 버튼을 누르는 순간
+        // 구매한 아이템이 수익으로, 판매 등록(Delete)이 소비로 잡힌다 — 거래소 거래는
+        // 파밍 수익이 아니므로 어느 쪽이든 집계에 들어가면 안 된다.
+        if (_state.value.paused || _state.value.inExchange) {
             slotLastCount[slotUuid] = totalCountInSlot
             // 거래소 안이면(구매/판매 등록/취소로 슬롯이 바뀔 때마다) 수동 새로고침 없이도
             // 보유 아이템 가치가 바로 최신으로 보이게 즉시 재계산한다.
@@ -1064,10 +1096,16 @@ class SessionAggregator(
             if (newArea == null) return@update s
 
             // 같은 areaId 로 재-트리거되면 무시
-            if (prevArea == newArea) return@update s
+            if (prevArea == newArea) {
+                enterAreaPresenceReason = "지역 진입 신호 무시 — 같은 지역(areaId=$newArea)"
+                return@update s
+            }
 
             // 같은 areaId 없이 매우 짧은 간격(3초 이하) 안에 두 번 오면 게임의 중복 emit 로 간주
-            if (prevArea == null && lastEnterMs > 0 && nowMs - lastEnterMs < 3000) return@update s
+            if (prevArea == null && lastEnterMs > 0 && nowMs - lastEnterMs < 3000) {
+                enterAreaPresenceReason = "지역 진입 신호 무시 — 3초 내 중복(areaId=$newArea)"
+                return@update s
+            }
 
             val completed = if (prevArea != null) s.mapsCompleted + 1 else s.mapsCompleted
             // 이름 우선순위: map.json/map_alias.json 큐레이션 매핑 → 관측된 MapName code 원본
@@ -1084,8 +1122,8 @@ class SessionAggregator(
             val enteringOpenedMap = awaitingMapArea
             awaitingMapArea = false
             val now = System.currentTimeMillis()
-            val mapChunk = s.mapElapsedSinceMs?.let { since -> now - since } ?: 0
-            val currentMapChunk = s.currentMapElapsedSinceMs?.let { since -> now - since } ?: 0
+            val mapChunk = s.mapElapsedSinceMs?.let { since -> (now - since).coerceAtLeast(0) } ?: 0
+            val currentMapChunk = s.currentMapElapsedSinceMs?.let { since -> (now - since).coerceAtLeast(0) } ?: 0
             // EnterArea 는 맵 **진입**만 알린다. 이탈은 InputArea(지역 선택 복귀) ·
             // MapName 의 마을/LoginScene · areaId 없는 EnterArea 가 판정한다.
             //
@@ -1094,8 +1132,13 @@ class SessionAggregator(
             // 시계가 그 맵 내내 멈췄다 (`awaitingMapArea` 는 첫 진입에서 이미 소진되므로
             // 두 번째 지역부터는 항상 false 다).
             val stillInMap = enteringOpenedMap || s.inMap
-            if (stillInMap != s.inMap) {
-                enterAreaPresenceReason = "지역 진입(areaId=$newArea)"
+            enterAreaPresenceReason = when {
+                stillInMap != s.inMap -> "지역 진입(areaId=$newArea)"
+                // 판정이 안 바뀐 경우도 남긴다 — "재입장했는데 시계가 안 돈다" 를 조사하려면
+                // EnterArea 가 오긴 왔는지, 왔다면 어떤 areaId 였는지가 유일한 단서다.
+                // (맵 밖 유지 = 맵 열기(Spv3Open) 없이 지역만 바뀐 경우)
+                !stillInMap -> "지역 진입 신호 — 맵 밖 유지(areaId=$newArea)"
+                else -> "지역 이동(areaId=$newArea)"
             }
             val clockRuns = stillInMap && s.baselineReady && !s.paused
             s.copy(

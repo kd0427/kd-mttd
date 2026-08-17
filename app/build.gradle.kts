@@ -171,10 +171,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     // 무선 adb 페어링/연결 (RikkaApps/Shizuku 포팅, THIRD_PARTY_NOTICES.md 참고).
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
-    implementation("io.github.vvb2060.ndk:boringssl:20250114")
+    implementation(libs.bouncycastle.bcpkix)
+    implementation(libs.boringssl)
     // TLS exporter(RFC 5705) 공개 API 용 — AdbKey.sslContext 주석 참고.
-    implementation("org.conscrypt:conscrypt-android:2.5.2")
+    implementation(libs.conscrypt.android)
 
     // Networking & protobuf
     implementation(libs.okhttp)

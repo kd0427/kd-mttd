@@ -182,6 +182,9 @@ fun OnboardingScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
+                    Box(modifier = Modifier.align(Alignment.TopStart)) {
+                        ExitButton()
+                    }
                     Box(modifier = Modifier.align(Alignment.TopEnd)) {
                         UpdateCheckButton(onUpdateFound = { expandUpdateSignal++ })
                     }
@@ -2092,6 +2095,59 @@ private fun UpdateCheckButton(onUpdateFound: () -> Unit = {}) {
 }
 
 /**
+ * 종료 확인 팝업. 헤더의 [ExitButton] 과 설정 탭의 [ExitCard] 가 같이 쓴다 — 경고 문구와
+ * 실제 종료 동작이 두 곳에서 갈라지지 않게 한 곳에 둔다.
+ *
+ * 팝업인 이유는 리셋과 같다 — 같은 자리에서 버튼만 바뀌면 빠르게 두 번 탭했을 때 두 번째 탭이
+ * 바뀐 자리의 "확인" 에 그대로 들어간다. 종료는 세션(수익·회차·시간)이 통째로 사라지는
+ * 동작이라 실수 비용이 크다.
+ */
+@Composable
+private fun ExitConfirmDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("mTTD 를 종료할까요?") },
+        text = { Text("로그 추적과 오버레이가 중지되고, 지금까지 집계된 수익·회차 기록이 사라집니다.") },
+        confirmButton = {
+            TextButton(onClick = {
+                onDismiss()
+                com.mttd.service.TrackerForegroundService.stop(context)
+                (context as? android.app.Activity)?.finishAndRemoveTask()
+            }) { Text("종료", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("취소") }
+        },
+    )
+}
+
+/** 헤더 좌측 — [UpdateCheckButton] 과 마주 보는 자리. 설정 탭까지 안 들어가고 바로 끄는 길. */
+@Composable
+private fun ExitButton() {
+    var confirmExit by remember { mutableStateOf(false) }
+    if (confirmExit) {
+        ExitConfirmDialog(onDismiss = { confirmExit = false })
+    }
+    OutlinedButton(
+        onClick = { confirmExit = true },
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+        border = BorderStroke(1.dp, MttdColors.DangerLine),
+        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.error,
+        ),
+    ) {
+        Icon(
+            Icons.AutoMirrored.Filled.Logout,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text("종료", style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+/**
  * 앱 종료. 최근 앱 목록에서 카드를 스와이프해도 종료되도록 서비스는
  * `stopWithTask=true` 로 설정했지만, 그 전에 명시적으로 끌 수 있는 버튼도 필요해서 추가.
  * 로그 추적·오버레이를 모두 정리하고 액티비티도 닫는다.
@@ -2121,24 +2177,7 @@ private fun ExitCard() {
                 )
             }
             if (confirmExit) {
-                // 리셋과 같은 이유로 팝업이다 — 같은 자리에서 버튼만 바뀌면 빠르게 두 번
-                // 탭했을 때 두 번째 탭이 바뀐 자리의 "확인" 에 그대로 들어간다.
-                // 종료는 세션(수익·회차·시간)이 통째로 사라지는 동작이라 실수 비용이 크다.
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { confirmExit = false },
-                    title = { Text("mTTD 를 종료할까요?") },
-                    text = { Text("로그 추적과 오버레이가 중지되고, 지금까지 집계된 수익·회차 기록이 사라집니다.") },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            confirmExit = false
-                            com.mttd.service.TrackerForegroundService.stop(context)
-                            (context as? android.app.Activity)?.finishAndRemoveTask()
-                        }) { Text("종료", color = MaterialTheme.colorScheme.error) }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { confirmExit = false }) { Text("취소") }
-                    },
-                )
+                ExitConfirmDialog(onDismiss = { confirmExit = false })
             }
             OutlinedButton(
                 onClick = { confirmExit = true },

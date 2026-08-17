@@ -12,7 +12,7 @@
 |---|---|
 | JDK | 17 |
 | Android SDK | Platform 34, Build-Tools 34.0.0, **NDK 29.0.13113456, CMake 3.22.1** |
-| 기기 | Android 11 (API 30) 이상, 게임 설치됨, 무선 디버깅 켜짐 |
+| 기기 | Android 11 (API 30) 이상, 게임 설치됨, **USB 디버깅·무선 디버깅 둘 다 켜짐** |
 
 NDK/CMake 는 무선 adb 페어링용 네이티브 코드(`app/src/main/jni`)를 빌드하는 데 쓴다. NDK 버전은
 `app/build.gradle.kts` 의 `ndkVersion` 과 정확히 일치해야 한다 — 다른 버전은 헤더 조합이 깨진다.

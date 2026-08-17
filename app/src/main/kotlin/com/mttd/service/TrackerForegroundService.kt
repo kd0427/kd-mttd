@@ -592,7 +592,8 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         private const val DETAIL_DISCONNECTED =
             "게임 로그를 읽지 못하는 중이라 수익이 집계되지 않습니다.\n\n" +
                 "휴대폰을 재부팅하면 무선 디버깅이 꺼집니다. 개발자 옵션에서 다시 켜고 WiFi 에 " +
-                "연결한 뒤 이 알림을 누르면 자동으로 다시 연결됩니다 (페어링 코드는 다시 입력하지 않아도 됩니다)."
+                "연결한 뒤 이 알림을 누르면 자동으로 다시 연결됩니다 (페어링 코드는 다시 입력하지 않아도 됩니다).\n\n" +
+                "USB 디버깅도 함께 켜져 있어야 합니다 — 꺼져 있으면 WiFi 를 끄는 순간 연결이 끊깁니다."
         private const val TEXT_WAITING_GAME = "게임 실행 대기 중"
         private const val NOTIF_ID = 42
         /** 시세 TTL 과 동일 (PriceRepository.TTL_MS = 1h). */

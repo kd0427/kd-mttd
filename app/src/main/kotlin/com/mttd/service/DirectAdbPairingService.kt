@@ -129,8 +129,8 @@ class DirectAdbPairingService : Service() {
 
     private fun searchingNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("무선 디버깅 페어링 서비스 찾는 중...")
-            .setContentText("설정 → 개발자 옵션 → 무선 디버깅 → \"페어링 코드로 기기 페어링\"을 열어주세요")
+            .setContentTitle("페어링 화면을 열어주세요")
+            .setContentText("개발자 옵션 → 무선 디버깅 → \"페어링 코드로 기기 페어링\". 그 화면에서 나가지 마세요")
             .setSmallIcon(R.drawable.ic_stat_mttd)
             .setOngoing(true)
             .addAction(NotificationCompat.Action.Builder(0, "중지", stopPendingIntent()).build())
@@ -143,7 +143,7 @@ class DirectAdbPairingService : Service() {
             .build()
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("페어링 서비스를 찾았습니다")
-            .setContentText("이 알림을 펼쳐서, 화면에 뜬 6자리 코드를 입력하세요")
+            .setContentText("설정 화면을 그대로 둔 채, 이 알림을 펼쳐 6자리 코드를 입력하세요")
             .setSmallIcon(R.drawable.ic_stat_mttd)
             .setOngoing(true)
             .addAction(replyAction)

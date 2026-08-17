@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,6 +35,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.mttd.data.adb.DirectAdbManager
 
 /**
@@ -57,6 +61,23 @@ fun DirectAdbStatusCard(manager: DirectAdbManager) {
     // 아래 if(expanded || !connected) 가 항상 최신 값을 보게 두는 편이 맞다.
     var expanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    // 개발자 옵션 두 스위치의 실제 상태. 추측해서 안내하지 않고 값을 읽어서 짚어준다.
+    // 화면에 들어올 때만 읽는다 — 사용자가 설정 앱을 다녀오면 STARTED 가 다시 오므로 그때
+    // 갱신되고, 안 보는 동안 폴링하지 않는다(SetupWizardScreen 의 오버레이 권한과 같은 방식).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var wirelessDebuggingOn by remember { mutableStateOf(true) }
+    var usbDebuggingOn by remember { mutableStateOf(true) }
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            // 못 읽으면 켜진 것으로 본다 — 확실하지 않은데 경고를 띄우는 쪽이 더 나쁘다.
+            fun read(key: String) = try {
+                Settings.Global.getInt(context.contentResolver, key, 1) == 1
+            } catch (_: Throwable) { true }
+            wirelessDebuggingOn = read("adb_wifi_enabled")
+            usbDebuggingOn = read("adb_enabled")
+        }
+    }
 
     // 기본 Card 는 채워진 회색이라 나머지 화면(흰 면 + 얇은 테두리)과 톤이 어긋난다 —
     // SetupWizardScreen.WizardCard 와 같은 규칙을 쓴다.
@@ -89,27 +110,64 @@ fun DirectAdbStatusCard(manager: DirectAdbManager) {
             }
 
             if (expanded || !connected) {
-                Text(
-                    "① 무선 디버깅이 꺼져있다면 아래에서 개발자 옵션을 먼저 한 번 열어 켜주세요.\n" +
-                        "② 아래 \"페어링 시작\"을 눌러 검색을 켜두세요 (이 상태로 대기).\n" +
-                        "③ 그 다음 개발자 옵션 → 무선 디버깅 → \"페어링 코드로 기기 페어링\"을 여세요 — " +
-                        "이 화면에서 벗어나면 페어링이 끊기니, 여기서 화면을 안 바꾸고 그대로 두세요.\n" +
-                        "④ 알림 서랍을 내려서 뜬 알림에 화면의 6자리 코드를 입력하면 자동으로 연결됩니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                // 연결된 뒤엔 파일 접근이 순수 Binder(DirectDaemonStarter가 shell UID로 띄운
-                // 상주 프로세스)로 넘어가서 WiFi를 꺼도(LTE 등) 계속 동작한다 — 다만 그 상주
-                // 프로세스는 기기가 재부팅되면(또는 강제 종료되면) 같이 사라지므로, 그 다음엔
-                // 이 페어링/연결 과정을 다시 거쳐야 한다(그 순간엔 WiFi 필요).
-                Text(
-                    "※ 연결 직후 1~2초는 아직 WiFi 가 필요합니다. 위 줄이 \"이제 WiFi 를 꺼도 됩니다\" 로" +
-                        " 바뀌면 그때부터 WiFi 를 꺼도(LTE 등) 계속 동작합니다. 다만 기기를 재부팅하면" +
-                        " 무선 디버깅이 꺼지므로, 개발자 옵션에서 다시 켜고 WiFi에 연결한 상태로 이 화면을" +
-                        " 한 번 열어주세요 — 페어링은 저장돼 있어서 코드 입력은 다시 안 해도 됩니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                // 연결이 끊긴 상태에서만 띄운다. 붙고 나면 무선 디버깅을 꺼도 데몬은 계속
+                // 사는 게 이 설계의 목적이라, 그때 "켜세요" 라고 하면 멀쩡한 상태에 없는 문제를
+                // 만든다 (헤더의 "이제 WiFi 를 꺼도 됩니다" 와 정면으로 어긋난다).
+                if (!connected && !wirelessDebuggingOn) {
+                    Text(
+                        "무선 디버깅이 꺼져 있습니다 — 개발자 옵션에서 켜주세요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (!usbDebuggingOn) {
+                    // adb shell 로 띄운 데몬은 adbd 의 cgroup 에 들어가고, init 은 서비스를
+                    // cgroup 단위로 죽인다. USB 디버깅이 꺼져 있으면 WiFi 를 끄는 순간
+                    // 무선 디버깅만 남았던 adbd 가 내려가면서 데몬도 같이 죽는다.
+                    // (CUSTOMIZATION.md 의 "USB 디버깅이 왜 필요한가" 참고)
+                    Text(
+                        "USB 디버깅이 꺼져 있습니다 — 이대로 WiFi 를 끄면 연결이 끊깁니다. 개발자 옵션에서 켜주세요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                if (connected) {
+                    Text(
+                        "WiFi 를 꺼도 LTE 로 계속 집계됩니다.\n\n" +
+                            "재부팅하면 무선 디버깅이 꺼집니다. 다시 켜고 WiFi 에 연결한 채 이 화면을 열면 " +
+                            "자동으로 붙습니다 — 6자리 코드는 다시 입력하지 않습니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text("준비", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "개발자 옵션에서 USB 디버깅과 무선 디버깅을 둘 다 켜주세요.\n" +
+                            "USB 디버깅을 안 켜면 WiFi 를 끌 때 연결이 끊깁니다. 케이블은 안 꽂아도 됩니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text("연결 (처음 한 번만)", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "1. 아래 \"페어링 시작\" 을 누르세요. 앱을 나가도 계속 찾습니다.\n" +
+                            "2. 개발자 옵션 → 무선 디버깅 → \"페어링 코드로 기기 페어링\" 을 여세요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "⚠️ 이 화면에서 나가면 처음부터 다시 해야 합니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        "3. 그 화면을 둔 채 알림창을 내려, 뜬 알림에 6자리 코드를 입력하세요.\n" +
+                            "   시간 제한은 없으니 천천히 하셔도 됩니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
                 val statusText = when (status) {
                     DirectAdbManager.Status.IDLE -> null

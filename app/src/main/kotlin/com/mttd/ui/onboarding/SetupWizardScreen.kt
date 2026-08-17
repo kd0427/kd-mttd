@@ -188,9 +188,8 @@ private fun WizardCard(title: String, body: @Composable androidx.compose.foundat
 private fun PairingStep(manager: DirectAdbManager) {
     WizardCard(title = "1. 무선 디버깅 연결") {
         Text(
-            "안드로이드 11부터는 일반 앱이 다른 앱의 파일을 못 읽습니다. mTTD 는 기기의 " +
-                "무선 디버깅에 자기 자신으로 붙어서 게임 로그만 읽습니다 (root·다른 앱 불필요). " +
-                "아래 카드의 순서대로 한 번만 페어링하면 됩니다.",
+            "게임 로그를 읽으려면 이 기기의 무선 디버깅에 한 번 연결해야 합니다. " +
+                "root 도, 다른 앱 설치도 필요 없습니다. 아래 순서대로만 해주세요.",
             style = MaterialTheme.typography.bodyMedium,
         )
     }

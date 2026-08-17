@@ -174,6 +174,41 @@ adb shell "$BASE/lib/arm64/libmttd_starter.so --apk=$BASE/base.apk \
 파일 접근 whitelist 는 `GameFileAccessPolicy` 한 곳에만 있다 — 데몬 쪽 `UserService` 와 데몬이
 뜨기 전 폴백인 `DirectAdbManager.LocalUserService` 가 같이 쓰므로 여기만 고친다.
 
+### USB 디버깅이 왜 필요한가 (원본에 없는 조건)
+
+**무선 디버깅만 켜고 WiFi 를 끄면 데몬이 죽는다.** USB 디버깅까지 켜져 있으면 산다 —
+케이블을 꽂을 필요는 없고 토글만 켜져 있으면 된다.
+
+기기에서 확인한 원인:
+
+```
+adb shell 프로세스의 cgroup:  0::/system/uid_0/pid_526
+adbd 의 pid:                 526          ← 같다
+```
+
+`adb shell` 로 뜬 프로세스는 **adbd 자신의 cgroup** 에 들어간다. `mttd_starter.cpp` 의
+`fork()+setsid()` 는 세션만 분리할 뿐 cgroup 소속은 그대로다. adbd 는 init 서비스이고
+(`init.svc.adbd`), init 은 서비스를 **cgroup 단위로** 죽인다. 그래서 WiFi 를 끄면 무선
+디버깅이 꺼지고, 다른 전송 수단이 없으면 adbd 가 내려가면서 데몬도 같이 끌려간다.
+USB 디버깅이 켜져 있으면 adbd 가 USB 전송 때문에 계속 살아 있어 데몬도 산다.
+
+**코드로는 우회할 수 없다.** Shizuku 의 `switch_cgroup()` 이 이걸 탈출하는 함수인데
+`uid == 0` 안에서만 부른다. 실제로 shell 로 시도하면:
+
+```
+shell 의 그룹에 system(1000) 없음
+echo $$ > /sys/fs/cgroup/cgroup.procs  →  Permission denied
+```
+
+cgroup 파일이 전부 `system:system` 소유라 shell 은 쓸 수 없다. `/dev/cpuctl` 등 v1
+컨트롤러도 마찬가지고, 애초에 죽이는 데 쓰이는 건 v2 통합 cgroup(`/sys/fs/cgroup`) 이다.
+**root 없이는 방법이 없으므로 USB 디버깅을 켜 두는 것이 유일한 해법이다.**
+
+원본(`listil/mttd`)의 b53cd7f 커밋은 "WiFi 끔 / WiFi→LTE 전환 양쪽에서 데몬 생존 확인"
+이라고 적고 있는데, 개발 기기는 USB 디버깅이 켜져 있는 게 보통이라 이 조건이 가려진
+것으로 보인다. 앱은 `adb_enabled`(USB)·`adb_wifi_enabled`(무선) 를 읽어 꺼져 있으면
+경고한다 — 둘 다 일반 앱이 읽을 수 있는 값이다.
+
 ### 상주 알림이 연결 상태를 알려준다
 
 게임을 하는 동안 사용자가 보는 건 오버레이뿐이라, 로그 연결이 끊긴 걸(재부팅 후 무선 디버깅이

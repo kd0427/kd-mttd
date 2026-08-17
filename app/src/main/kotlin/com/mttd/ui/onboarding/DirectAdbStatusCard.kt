@@ -46,6 +46,9 @@ import com.mttd.data.adb.DirectAdbManager
 @Composable
 fun DirectAdbStatusCard(manager: DirectAdbManager) {
     val connected by manager.ready.collectAsStateWithLifecycle()
+    // adb 셸 폴백으로 읽는 중인지, 데몬 Binder 로 읽는 중인지 — 전자는 WiFi 가 끊기면 같이
+    // 끊긴다. "WiFi 꺼도 된다" 를 이 값이 참일 때만 말한다.
+    val daemonReady by manager.daemonReady.collectAsStateWithLifecycle()
     val status by manager.status.collectAsStateWithLifecycle()
     val lastError by manager.lastError.collectAsStateWithLifecycle()
     // false로 고정 — !connected 를 초기값으로 넣으면 "연결 안 됨" 상태로 펼쳐진 채 시작했다가
@@ -71,7 +74,11 @@ fun DirectAdbStatusCard(manager: DirectAdbManager) {
                     modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("✅ 무선 adb 연결됨", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(
+                        if (daemonReady) "✅ 연결됨 — 이제 WiFi 를 꺼도 됩니다" else "✅ 연결됨 — 준비 중이니 WiFi 를 유지해주세요",
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
                     Icon(
                         if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                         contentDescription = if (expanded) "접기" else "펼치기",
@@ -96,7 +103,8 @@ fun DirectAdbStatusCard(manager: DirectAdbManager) {
                 // 프로세스는 기기가 재부팅되면(또는 강제 종료되면) 같이 사라지므로, 그 다음엔
                 // 이 페어링/연결 과정을 다시 거쳐야 한다(그 순간엔 WiFi 필요).
                 Text(
-                    "※ 한 번 연결되면 이후엔 WiFi 없이(LTE 등) 계속 동작합니다. 다만 기기를 재부팅하면" +
+                    "※ 연결 직후 1~2초는 아직 WiFi 가 필요합니다. 위 줄이 \"이제 WiFi 를 꺼도 됩니다\" 로" +
+                        " 바뀌면 그때부터 WiFi 를 꺼도(LTE 등) 계속 동작합니다. 다만 기기를 재부팅하면" +
                         " 무선 디버깅이 꺼지므로, 개발자 옵션에서 다시 켜고 WiFi에 연결한 상태로 이 화면을" +
                         " 한 번 열어주세요 — 페어링은 저장돼 있어서 코드 입력은 다시 안 해도 됩니다.",
                     style = MaterialTheme.typography.bodySmall,

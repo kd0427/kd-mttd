@@ -54,6 +54,16 @@ class DirectAdbManager(private val appContext: Context) {
     private val _connected = MutableStateFlow(false)
     val ready: StateFlow<Boolean> = _connected.asStateFlow()
 
+    /**
+     * shell UID 데몬 Binder 가 실제로 붙어 있는가 = **네트워크 없이도 동작하는 상태인가.**
+     *
+     * [ready] 와 구분해야 한다. [ready] 는 "로그를 읽을 수 있다" 일 뿐이라, 데몬이 붙기 전
+     * adb 셸 폴백([LocalUserService])으로 읽는 동안에도 참이다. 그때 WiFi 를 끄면 끊긴다.
+     * 사용자에게 "이제 WiFi 꺼도 된다" 고 말해도 되는 시점은 이쪽이 참이 된 뒤다.
+     */
+    private val _daemonReady = MutableStateFlow(false)
+    val daemonReady: StateFlow<Boolean> = _daemonReady.asStateFlow()
+
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
@@ -99,6 +109,7 @@ class DirectAdbManager(private val appContext: Context) {
                 Log.w(TAG, "daemon binder died")
                 DiagnosticLog.log(appContext, "DirectAdb", "daemon binder died — will re-bootstrap on next retryConnect")
                 daemonBound = false
+                _daemonReady.value = false
                 // service 는 일부러 안 내린다 — 다음 IUserService 호출이 자연히 실패하면서
                 // 호출부(LogPoller 등)가 기존에 하던 에러 처리 경로를 그대로 타면 되고, 여기서
                 // service = null 로 내리면 그 사이 잠깐 "아직 준비 안 됨" 오탐이 뜬다.
@@ -108,6 +119,7 @@ class DirectAdbManager(private val appContext: Context) {
         }
         service = IUserService.Stub.asInterface(binder)
         daemonBound = true
+        _daemonReady.value = true
         _connected.value = true
         _status.value = Status.CONNECTED
         DiagnosticLog.log(appContext, "DirectAdb", "daemon binder attached — switched off adb shell fallback")
@@ -145,7 +157,7 @@ class DirectAdbManager(private val appContext: Context) {
         }
     }
 
-    fun hasSavedConnection(): Boolean = prefs.getString(KEY_PORT, null) != null
+    fun hasSavedConnection(): Boolean = prefs.getInt(KEY_PORT, -1) > 0
 
     /** [DirectAdbStatusCard] 의 "페어링 시작" 버튼 — 알림 기반 코드 입력 플로우를 띄운다. */
     @RequiresApi(Build.VERSION_CODES.R)
@@ -238,8 +250,16 @@ class DirectAdbManager(private val appContext: Context) {
                 }
                 Log.w(TAG, "retryConnect failed", t)
                 _status.value = Status.IDLE
-                _lastError.value = "재연결 실패: ${t.message ?: t.javaClass.simpleName}"
-                DiagnosticLog.log(appContext, "DirectAdb", "retryConnect failed: ${t.javaClass.simpleName}: ${t.message}")
+                // 첫 시도의 예외(t)를 그대로 보여주면 안 된다 — 저장된 포트는 무선 디버깅을
+                // 껐다 켤 때마다 바뀌므로 그 실패는 정상이고, 진짜 원인은 그 다음 재탐색이
+                // 실패했는지 여부다. 예전엔 t.message 를 띄우는 바람에 무선 디버깅이 꺼져
+                // 있을 때도 "port 42943 ECONNREFUSED" 같은, 사용자가 손쓸 수 없는 문구가 떴다.
+                _lastError.value = if (fresh == null) {
+                    "무선 디버깅을 찾지 못했습니다 — 개발자 옵션에서 켜져 있는지, WiFi 에 연결됐는지 확인한 뒤 이 화면을 다시 열어주세요"
+                } else {
+                    "연결하지 못했습니다 — 무선 디버깅을 껐다 켠 뒤 다시 시도해주세요"
+                }
+                DiagnosticLog.log(appContext, "DirectAdb", "retryConnect failed (rediscovered=${fresh != null}): ${t.javaClass.simpleName}: ${t.message}")
             } finally {
                 reconnecting = false
             }
@@ -380,6 +400,13 @@ class DirectAdbManager(private val appContext: Context) {
 
     companion object {
         private const val KEY_PORT = "connect_port"
-        private const val DISCOVER_TIMEOUT_MS = 15_000L
+        /**
+         * mDNS 로 무선 디버깅 포트를 찾는 제한 시간.
+         *
+         * **페어링 코드 입력 시간과는 무관하다** — 코드 입력에는 제한이 없다
+         * ([DirectAdbPairingService] 의 탐색은 타임아웃 없이 돌고, 알림도 답할 때까지 남는다).
+         * 이 값은 코드가 통과한 **뒤** 연결 포트를 찾는 데, 그리고 [retryConnect] 의 재탐색에 쓰인다.
+         */
+        private const val DISCOVER_TIMEOUT_MS = 30_000L
     }
 }

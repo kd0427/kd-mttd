@@ -85,7 +85,7 @@ import com.mttd.IUserService
 import com.mttd.ui.theme.MttdColors
 import com.mttd.TrackerApplication
 import com.mttd.data.log.LogPoller
-import com.mttd.data.shizuku.ShizukuState
+import com.mttd.data.adb.DirectAdbManager
 import com.mttd.domain.models.SessionState
 import com.mttd.service.TrackerForegroundService
 import kotlinx.coroutines.Dispatchers
@@ -109,15 +109,15 @@ private enum class MainTab(val label: String) {
  * 앱 메인 화면 — **수익 집계**와 **옵션 설정**을 탭으로 분리.
  *
  * - 수익 탭: 세션 집계(경과·총 수익·시간당·픽업 목록) + 현재 시세 요약 한 줄
- * - 설정 탭: Shizuku · 오버레이 · 시세 출처 · 로그 프로브 · 로그 tail
+ * - 설정 탭: 무선 adb 연결 · 오버레이 · 시세 출처 · 로그 프로브 · 로그 tail
  */
 @Composable
 fun OnboardingScreen(
-    state: ShizukuState,
-    onRequestPermission: () -> Unit,
+    manager: DirectAdbManager,
     userService: () -> IUserService?,
     onReopenWizard: () -> Unit = {},
 ) {
+    val ready by manager.ready.collectAsStateWithLifecycle()
     var tab by remember { mutableStateOf(MainTab.EARNINGS) }
     val context = LocalContext.current
     // "업데이트 확인" 을 눌러서 새 버전을 찾았을 때만 배너를 펼친다. 서비스가 시작할 때
@@ -229,7 +229,7 @@ fun OnboardingScreen(
                 UpdateBanner(expandSignal = expandUpdateSignal)
                 when (tab) {
                     MainTab.EARNINGS -> {
-                        if (!state.ready) {
+                        if (!ready) {
                             NotReadyNotice(onGoToSettings = { tab = MainTab.SETTINGS })
                         }
                         EarningsSummaryCard()
@@ -240,18 +240,18 @@ fun OnboardingScreen(
                         ValueScreen()
                     }
                     MainTab.SETTINGS -> {
-                        ShizukuStatusCard(state = state, onRequestPermission = onRequestPermission)
-                        // 오버레이 권한은 Shizuku 와 무관(userService 안 씀)해서 게이트 밖으로 뺐다 —
-                        // 안 그러면 재부팅으로 Shizuku 가 죽었을 때 이미 켜둔 오버레이 설정을
+                        DirectAdbStatusCard(manager)
+                        // 오버레이 권한은 로그 접근과 무관(userService 안 씀)해서 게이트 밖으로 뺐다 —
+                        // 안 그러면 재부팅으로 연결이 끊겼을 때 이미 켜둔 오버레이 설정을
                         // 확인/조정할 카드 자체가 통째로 사라져 보인다.
                         OverlayCard()
-                        if (state.ready) {
+                        if (ready) {
                             PriceCard()
                             LoadoutExportCard()
                             AdvancedSection(userService = userService)
                         } else {
                             Text(
-                                text = "Shizuku 준비 완료 후 나머지 설정이 활성화됩니다.",
+                                text = "무선 adb 연결 후 나머지 설정이 활성화됩니다.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -485,9 +485,9 @@ private fun NotReadyNotice(onGoToSettings: () -> Unit) {
                 )
             }
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("Shizuku 연결 필요", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                Text("로그 연결 필요", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "로그를 읽으려면 Shizuku를 준비해 주세요.",
+                    "로그를 읽으려면 무선 adb 연결을 준비해 주세요.",
                     fontSize = 12.sp,
                     lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -847,90 +847,6 @@ private fun PriceSummaryLine() {
 }
 
 @Composable
-private fun ShizukuStatusCard(
-    state: ShizukuState,
-    onRequestPermission: () -> Unit,
-) {
-    val context = LocalContext.current
-    var expanded by remember { mutableStateOf(false) }
-    // 다 준비된 상태에선 매번 4줄 상세를 보여줄 필요가 없어 한 줄 요약으로 접어둔다.
-    // 뭔가 문제가 있을 땐(하나라도 false) 바로 뭘 고쳐야 하는지 보여야 하니 항상 펼쳐둔다.
-    val collapsible = state.ready
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = CardDefaults.outlinedCardBorder(),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            if (collapsible) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { expanded = !expanded },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        "✅ Shizuku 준비 완료",
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Icon(
-                        if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                        contentDescription = if (expanded) "접기" else "펼치기",
-                    )
-                }
-            } else {
-                Text("Shizuku 상태", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            }
-            if (expanded || !collapsible) {
-                StatusRow("설치됨", state.installed)
-                StatusRow("Shizuku 실행", state.binderAlive)
-                StatusRow("권한 허용", state.permission)
-                StatusRow("로그 연결", state.userServiceBound)
-                Spacer(Modifier.height(2.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        modifier = Modifier.weight(1f).height(56.dp),
-                        onClick = onRequestPermission,
-                        enabled = state.installed,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                    ) {
-                        Text(
-                            when {
-                                !state.installed -> "Shizuku 미설치"
-                                !state.binderAlive -> "Shizuku 실행 후 재확인"
-                                !state.permission -> "권한 요청"
-                                !state.userServiceBound -> "로그 연결 다시 시도"
-                                else -> "이미 준비됨"
-                            }
-                        )
-                    }
-                    OutlinedButton(
-                        modifier = Modifier.height(56.dp),
-                        onClick = {
-                        context.startActivity(
-                            android.content.Intent(
-                                android.content.Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://github.com/RikkaApps/Shizuku/releases"),
-                            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-                        )
-                    },
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
-                    ) { Text("APK 다운로드") }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun StatusRow(label: String, ok: Boolean) {
     val accent = if (ok) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
     Row(
@@ -1010,12 +926,12 @@ private fun ProbeCard(userService: () -> IUserService?) {
     var logSize by remember { mutableStateOf("(조회 중...)") }
     var logPath by remember { mutableStateOf("(대기)") }
 
-    // Shizuku 바인더가 죽은 채로 카드를 열면 서비스가 null 이라 조회가 통째로 멈춘다.
+    // 연결이 끊긴 채로 카드를 열면 서비스가 null 이라 조회가 통째로 멈춘다.
     // 바인더가 돌아오면 다시 시도하도록, 서비스 인스턴스가 바뀌면 이 effect 를 재시작한다.
     LaunchedEffect(userService()) {
         val svc = userService() ?: run {
             logSize = "UserService 없음"
-            installedGames = "(Shizuku 대기 중)"
+            installedGames = "(연결 대기 중)"
             logPath = "(대기)"
             return@LaunchedEffect
         }

@@ -25,7 +25,7 @@ private val MttdLightColors = lightColorScheme(
     // 블루 톤 카드/칩 배경 (시세 바, 선택된 미니패널 항목, 보조 버튼).
     primaryContainer = Color(0xFFEAF4FF),
     onPrimaryContainer = Color(0xFF0F6BC9),
-    // 경고 오렌지. Shizuku 안내와 가방 정렬 안내에만 제한적으로 쓴다.
+    // 경고 오렌지. 연결 안내와 가방 정렬 안내에만 제한적으로 쓴다.
     secondary = Color(0xFFE07B12),
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFF4E8),
@@ -88,7 +88,7 @@ object MttdColors {
     val DangerBg = Color(0xFFFFF6F6)
     /** 꺼진 토글의 트랙 색. */
     val ToggleOff = Color(0xFFE5A0A3)
-    /** Shizuku 체크리스트에서 미완료 항목의 아이콘 배경. */
+    /** 상태 체크리스트에서 미완료 항목의 아이콘 배경. */
     val FailBg = Color(0xFFFDECEC)
 
     /** 선택되지 않은 칩/라디오 카드의 배경 — 흰색보다 아주 살짝 푸르다. */

@@ -50,10 +50,33 @@ merge-base 가 `aa6bbd4`(0.3.4 버전 범프 커밋 — `v0.3.4` **태그**가 �
 | `59e07c5` | 캐릭터 빌드 내보내기를 로그 릴레이로 전환 | 반영 (cherry-pick + 충돌 해결) |
 | `36e04d3` | 수익/가치 스와이프, 버튼을 화면 기준으로 구분 | 재구현 (헤더가 갈라져 그대로 안 붙음) |
 | `1d57478` | 펼친 HUD 가 드래그로 안 움직이던 문제 | 재구현 (위와 한 묶음) |
-| `bfb3345` | Shizuku 없이 무선 adb 로 붙는 direct 플레이버 | 스킵 — Shizuku 로 간다 |
+| `bfb3345` | Shizuku 없이 무선 adb 로 붙는 direct 플레이버 | 스킵 — Shizuku 로 간다 (**2026-08-18 뒤집음**, 아래 참고) |
 | `b53cd7f` | direct 플레이버 상주 데몬 | 스킵 (위와 같은 이유) |
 | `a67ccaf` | direct 데몬 재접속·자동 정리 | 스킵 (위와 같은 이유) |
 | `736ef28` | 원본 0.3.5 버전 범프 | 해당 없음 — 이 포크는 버전을 따로 매긴다 |
+
+**2026-08-18 — direct 3 개 커밋의 스킵 결정을 뒤집음** (`upstream/main` 은 여전히 `a67ccaf`,
+기준 해시는 안 움직인다)
+
+`bfb3345` · `b53cd7f` · `a67ccaf` 를 반영했다. 08-15 에는 "Shizuku 로 간다"로 스킵했지만,
+목표가 바뀌었다 — **Shizuku 앱 설치 단계 자체를 없애는 것**. 원본이 만든 이유(일부 기기에서
+`Shizuku.bindUserService()` 가 영원히 멈추는 버그 우회)와는 다른 동기지만 결과물은 같다.
+
+원본과 다르게 **플레이버로 나누지 않고 `main` 에서 Shizuku 를 통째로 걷어냈다.** 원본은 두
+APK(`shizuku`/`direct`)를 유지해야 해서 `PrivilegedAccessManager` 추상화와 소스셋 분리가
+필요했지만, 이 포크는 direct 경로 하나뿐이라 그게 전부 불필요하다. 그 덕에 CI 산출물 경로,
+`RELEASING.md` 절차, 인앱 업데이트가 전부 그대로다.
+
+| 원본과 다른 점 | 이유 |
+| --- | --- |
+| 플레이버 없음 (`src/direct/**` → `src/main/**`) | 구현이 하나뿐 |
+| `PrivilegedAccessManager` 인터페이스 미도입 | 구현체가 1 개면 추상화가 비용만 남는다 |
+| `minSdk` 를 30 으로 (플레이버가 아니라 앱 전체) | 무선 디버깅이 Android 11+ |
+| `shizuku-api`/`provider` 의존성·`ShizukuManager` 삭제 | 쓰는 곳이 없음 |
+| `extractNativeLibs` 를 매니페스트가 아니라 `packaging.jniLibs.useLegacyPackaging` 로 | 플레이버 오버라이드가 필요 없어져서 AGP 권장 방식이 됨 |
+| `DirectDaemonStarter` R8 keep 규칙 추가 | `app_process` 가 클래스명 문자열로 로드한다 — 없으면 **릴리스 빌드에서만** 데몬이 안 뜨고 adb-shell 폴백으로 조용히 넘어간다 |
+
+빌드에 NDK `29.0.13113456` + CMake `3.22.1` 이 필요해졌다 (`INSTALL.md`, `release.yml` 참고).
 
 `upstream`은 **가져오기 전용**이다. 원본에 실수로 push 하는 길을 막으려고 push URL을 가짜 값으로
 바꿔 뒀다 (`git push upstream`이 "repository does not exist"로 실패한다).
@@ -91,6 +114,89 @@ GitHub Actions 릴리스 빌드에서는 `kd0427/kd-mttd`를 업데이트 채널
 ```bash
 ./gradlew :app:assembleRelease -PupdateRepo=kd0427/kd-mttd
 ```
+
+## 게임 로그 접근 방식
+
+Shizuku 앱을 쓰지 않는다. 앱이 기기의 무선 디버깅(Android 11+)에 **자기 자신으로** 페어링해서
+`app_process` 로 shell UID 상주 데몬(`DirectDaemonStarter`)을 한 번 띄우고, 그 뒤로는 순수
+Binder IPC 로만 통신한다.
+
+- adb 연결은 **데몬을 띄우는 부트스트랩 용도로만** 쓴다 → 연결 후엔 WiFi 를 꺼도(LTE 등) 동작한다.
+- 데몬은 3 초마다 `/proc` 을 훑어 앱 프로세스를 확인하고, **새 PID 를 보면 즉시** Binder 를
+  재전송한다 → 앱이 재시작해도 최대 3 초 안에 다시 붙는다.
+- 앱 프로세스를 1 시간 동안 한 번도 못 보면 데몬이 스스로 종료한다 (`SELF_EXPIRE_AFTER_MS`).
+- **재부팅하면 무선 디버깅이 꺼지면서 데몬도 사라진다** → 개발자 옵션에서 다시 켜고 WiFi 에서
+  한 번 다시 붙어야 한다. 페어링 키는 저장돼 있어 코드 재입력은 없다.
+
+### ⚠️ `getContentProviderExternal` 은 앱을 되살린다
+
+`HiddenApis.callProvider()` 가 쓰는 `IActivityManager.getContentProviderExternal()` 은 **대상
+provider 의 프로세스가 없으면 새로 띄운다** (`content` 셸 커맨드가 잠든 앱을 깨우는 그 경로).
+그래서 앱 생존 확인 없이 재전송하면 두 가지가 같이 깨진다 — 사용자가 스와이프로 끈 앱이 계속
+되살아나고, 그 호출이 늘 성공하는 바람에 **만료 시계가 리셋돼 데몬이 절대 자살하지 않는다.**
+
+그래서 `DirectDaemonStarter` 는 `/proc` 스캔으로 앱이 살아있을 때만 호출한다. 단 **스캔을 못
+믿는 환경에서는 게이트를 끈다** — 데몬은 앱이 켜져 있을 때 그 앱의 adb 연결로 기동되므로 기동
+직후 스캔에서 앱을 못 찾으면 `/proc` 이 가려진 환경(hidepid 로 마운트된 롬 등)이라는 뜻이고,
+그때는 원본과 같은 무조건 재전송으로 되돌아간다. 죽은 앱을 한 번 되살리는 비용보다, 살아있는
+앱이 데몬에 영영 못 붙어 WiFi 의존 폴백에 갇히는 손해가 훨씬 크기 때문이다. 원본
+(`listil/mttd`)에는 이 가드가 없다 — 원본의 "안 쓰면 알아서 정리됨" 설명은 그래서 사실과 다르다.
+
+같은 이유로 `getContentProviderExternal` 에 `token=null` 을 넘기던 것도 고쳤다. null 토큰은
+"참조를 안 잡는다"가 아니라 AMS 의 **회수 불가 카운트**(`externalProcessNoHandleCount`)를 올려서
+호출할 때마다 누적된다 — 실제 토큰을 넘기고 `removeContentProviderExternal` 로 돌려준다.
+
+#### 에뮬레이터 검증 결과 (2026-08-18, API 37)
+
+페어링 없이 `adb shell` 에서 데몬을 직접 띄워 확인했다. 재현 명령:
+
+```bash
+BASE=$(adb shell pm path com.doyoon.kdmttd.debug | sed 's|package:||;s|/base.apk||')
+adb shell "$BASE/lib/arm64/libmttd_starter.so --apk=$BASE/base.apk \
+  --class=com.mttd.data.adb.starter.DirectDaemonStarter --name=mttd_daemon \
+  --authority=com.doyoon.kdmttd.debug.direct.userservice --pkg=com.doyoon.kdmttd.debug"
+```
+
+| 확인 | 결과 |
+| --- | --- |
+| `libmttd_starter.so` 가 실행 가능한 실제 파일로 풀림 | `-rwxr-xr-x` 확인 (`useLegacyPackaging` 유효) |
+| 데몬 → 앱 Binder 핸드오프 | `daemon binder attached` |
+| 토큰 누수 | 수정 전 `externals: notoken=10` → 수정 후 **externals 줄 자체가 없음** |
+| 앱이 죽은 동안 AMS 호출 | 40 초간 **0 회** (부활 없음) |
+| 앱 재시작 후 재부착 | **1.3 초** (기존 코드는 최대 15 초) |
+| 데몬 자살 | `SELF_EXPIRE_AFTER_MS` 를 30 초로 낮춘 빌드에서 정확히 30 초에 종료 |
+| 상주 알림 상태 표시 | 연결 후 게임이 없는 상태에서 "게임을 찾는 중" 으로 바뀌는 것 확인 |
+
+**에뮬레이터로 확인 못 한 것**: 무선 디버깅 페어링(SPAKE2·mDNS), WiFi→LTE 전환 유지, 재부팅
+동작. 그리고 검증 기기는 API 37 이라 실제 사용 대역(11~15)과 다르다 — 히든 API 시그니처가
+그 대역에서도 같은지는 실기기 확인이 필요하다.
+
+파일 접근 whitelist 는 `GameFileAccessPolicy` 한 곳에만 있다 — 데몬 쪽 `UserService` 와 데몬이
+뜨기 전 폴백인 `DirectAdbManager.LocalUserService` 가 같이 쓰므로 여기만 고친다.
+
+### 상주 알림이 연결 상태를 알려준다
+
+게임을 하는 동안 사용자가 보는 건 오버레이뿐이라, 로그 연결이 끊긴 걸(재부팅 후 무선 디버깅이
+꺼진 경우 등) 앱을 열기 전엔 알 방법이 없었다 — 수치가 안 늘어나는 걸로만 눈치채야 했다. 그래서
+이미 떠 있는 포그라운드 알림 문구를 상태에 따라 바꾼다.
+
+| 상태 | 접힌 알림 문구 |
+| --- | --- |
+| 로그 연결 안 됨 | `연결 끊김 — 무선 디버깅을 켜주세요` (+ 펼치면 상세 안내) |
+| 연결됐지만 게임을 못 찾음 | `게임 실행 대기 중` |
+| 폴링 중 | `로그 감시 중` |
+
+**접힌 알림 한 줄을 넘기지 말 것.** 실측상 한글 **22 자쯤에서 잘린다** — 처음엔
+`게임 로그에 연결되지 않음 — 무선 디버깅을 켜고 앱을 열어주세요` 로 썼다가 에뮬레이터에서
+`…무선 디버깅을 켜고…` 로 잘려 **정작 할 일이 말줄임표 뒤로 사라지는** 걸 확인하고 줄였다.
+긴 안내는 `BigTextStyle` 로 넘겨 펼쳤을 때만 보이게 한다.
+
+"앱을 열어주세요" 같은 문구도 뺐다 — 알림을 누르면 앱이 열리므로 군더더기다.
+
+> **안 넣은 것**: "앱이 삭제되면 데몬 즉시 종료". `-Djava.class.path` 의 APK 경로가 사라졌는지로
+> 판단하려 했는데, **앱 업데이트도 APK 경로를 바꾼다** — 인앱 업데이트를 쓰는 이 앱에서는 업데이트
+> 때마다 데몬이 죽어 매번 WiFi 재부트스트랩이 필요해진다. 삭제는 1 시간 만료로 충분하다(그 사이
+> 데몬은 `/proc` 스캔만 하고, 재부팅하면 어차피 사라진다).
 
 ## 현재 HUD 설계
 

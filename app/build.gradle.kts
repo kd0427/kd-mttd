@@ -21,10 +21,15 @@ android {
     // 공존 설치할 수 있게 한다.
     namespace = "com.mttd"
     compileSdk = 34
+    // SPAKE2 페어링 JNI 빌드용. NDK 26(AGP 기본값)의 bionic jni.h 는 <stdint.h> 를 스스로
+    // 안 끌어와서 프리팹 헤더와 조합 시 uint8_t 등이 깨진다 — Shizuku 본가가 실제 검증해서
+    // 쓰는 버전으로 고정해 같은 조합을 재현한다.
+    ndkVersion = "29.0.13113456"
 
     defaultConfig {
         applicationId = "com.doyoon.kdmttd"
-        minSdk = 29
+        // 무선 디버깅이 Android 11+ 기능이라 그 아래로는 붙을 방법이 없다.
+        minSdk = 30
         targetSdk = 34
         // 릴리스마다 반드시 올릴 것. 안 올리면 시스템이 업데이트로 인식하지 않는다.
         // versionName 은 GitHub 릴리스 태그(vX.Y.Z)와 맞춘다 — 인앱 업데이트 확인이 이걸로 비교.
@@ -49,10 +54,20 @@ android {
         }
     }
 
+    // SPAKE2 페어링 핸드셰이크(1회성)와 shell UID 데몬을 띄우는 starter 바이너리.
+    // RikkaApps/Shizuku 포팅 — THIRD_PARTY_NOTICES.md 참고.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/jni/CMakeLists.txt")
+        }
+    }
+
     buildFeatures {
         compose = true
         aidl = true
         buildConfig = true
+        // CMake 가 boringssl AAR(prefab 패키지)을 find_package() 로 찾으려면 필요.
+        prefab = true
     }
 
     buildTypes {
@@ -82,8 +97,17 @@ android {
     }
 
     packaging {
+        jniLibs {
+            // libmttd_starter.so 는 dlopen 대상이 아니라 진짜 실행 파일이라(DirectDaemonStarter
+            // 클래스 doc 참조) APK zip 안의 압축 엔트리가 아니라 디스크에 실제 파일로 풀려 있어야
+            // shell 이 실행할 수 있다. AGP 기본값(false)은 압축된 채로 두므로 실행이 불가능하다.
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // bcpkix/bcutil/bcprov 전이 의존성 버전이 서로 살짝 달라(1.80 vs 1.80.2) 같은 OSGi
+            // 매니페스트 경로가 중복으로 잡힌다. 코드 동작과 무관한 리소스.
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
         }
     }
 
@@ -146,9 +170,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
-    // Shizuku
-    implementation(libs.shizuku.api)
-    implementation(libs.shizuku.provider)
+    // 무선 adb 페어링/연결 (RikkaApps/Shizuku 포팅, THIRD_PARTY_NOTICES.md 참고).
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
+    implementation("io.github.vvb2060.ndk:boringssl:20250114")
+    // TLS exporter(RFC 5705) 공개 API 용 — AdbKey.sslContext 주석 참고.
+    implementation("org.conscrypt:conscrypt-android:2.5.2")
 
     // Networking & protobuf
     implementation(libs.okhttp)

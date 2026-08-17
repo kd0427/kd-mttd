@@ -29,6 +29,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # app/build.gradle.kts 의 ndkVersion 과 src/main/jni/CMakeLists.txt 의
+      # cmake_minimum_required 에 맞춘다. 러너 이미지에 미리 깔린 NDK 는 버전이 달라서
+      # 이 단계를 빼면 :app:configureCMakeRelease 에서 실패한다.
+      - name: Install NDK and CMake
+        shell: bash
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" "ndk;29.0.13113456" "cmake;3.22.1"
+
       - name: Restore signing key
         shell: bash
         run: |

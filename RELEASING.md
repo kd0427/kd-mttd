@@ -32,6 +32,15 @@ base64 < release.jks | tr -d '\n'
 
    R8 난독화·리소스 축소·`lintVital`은 **릴리스 빌드에만** 걸린다. 디버그가 통과해도 릴리스가 깨질 수 있다 — [proguard-rules.pro](app/proguard-rules.pro)에 protobuf-lite·AIDL·kotlinx-serialization 유지 규칙이 있는 것도 실제로 그렇게 깨졌기 때문이다. 이 단계를 건너뛰고 tag부터 밀면 워크플로가 실패해야 알게 되고, 릴리스는 만들어지지 않는다.
 
+   > ⚠️ 빌드 성공만으로는 못 잡는 것: `app_process` 가 **클래스명 문자열**로 로드하는
+   > `DirectDaemonStarter` 가 R8 에 지워지면 빌드는 그대로 통과하고 **릴리스 APK 에서만**
+   > shell UID 데몬이 안 뜬다 (앱은 adb-shell 폴백으로 조용히 계속 동작한다). 네이티브/데몬
+   > 쪽을 건드렸다면 매핑에 이름이 살아있는지 같이 확인한다.
+   >
+   > ```bash
+   > grep -c "^com.mttd.data.adb.starter.DirectDaemonStarter ->" app/build/outputs/mapping/release/mapping.txt
+   > ```
+
 3. 변경을 `main`에 커밋하고 푸시한다.
 4. 같은 버전의 tag를 만들고 푸시한다.
 

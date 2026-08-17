@@ -131,7 +131,7 @@ class LogPoller(
             val size = svcSize()
 
             if (size < 0) {
-                // 파일 사라짐 (rotation? uninstall? Shizuku 바인더 사망) — 인터벌 늘리고 재시도.
+                // 파일 사라짐 (rotation? uninstall? 데몬 사망) — 인터벌 늘리고 재시도.
                 //
                 // 여기서도 idleCount 를 세서 딥아이들(30초)까지 늘어나게 한다. 예전엔 5초로
                 // 고정이라, 게임이 안 깔린 기기에서 서비스만 켜 두면 분당 12회의 바인더 IPC 를
@@ -260,7 +260,7 @@ class LogPoller(
             } else {
                 idleCount++
                 // 로그가 오래 안 커지면 게임을 안 하는 것 → 거의 잠든다.
-                // 폴링 1 회 = Shizuku 바인더 IPC + stat 이므로 그대로 배터리 비용.
+                // 폴링 1 회 = 바인더 IPC + stat 이므로 그대로 배터리 비용.
                 intervalMs = when {
                     idleCount >= DEEP_IDLE_THRESHOLD -> DEEP_IDLE_INTERVAL_MS
                     idleCount >= IDLE_THRESHOLD -> MAX_INTERVAL_MS
@@ -436,7 +436,7 @@ class LogPoller(
     companion object {
         private const val TAG = "mTTD.Poller"
         /**
-         * 폴링 간격. 한 번 폴링할 때마다 Shizuku 프로세스로 바인더 IPC + stat 이 나가므로
+         * 폴링 간격. 한 번 폴링할 때마다 데몬 프로세스로 바인더 IPC + stat 이 나가므로
          * 그대로 배터리 비용이다.
          *
          * HUD 가 1 초 주기로 갱신되고 사용자가 체감하는 지연도 그 수준이라

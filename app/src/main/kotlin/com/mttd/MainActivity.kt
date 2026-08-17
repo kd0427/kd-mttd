@@ -15,7 +15,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mttd.data.prefs.OverlayPrefs
 import com.mttd.service.TrackerForegroundService
 import com.mttd.ui.onboarding.OnboardingScreen
@@ -35,9 +34,6 @@ class MainActivity : ComponentActivity() {
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
-    /** Shizuku 권한 다이얼로그를 이 액티비티에서 이미 한 번 띄웠는지. [onResume] 참조. */
-    private var permissionRequested = false
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -55,7 +51,7 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = true
         }
 
-        val shizuku = TrackerApplication.instance.shizukuManager
+        val access = TrackerApplication.instance.accessManager
 
         setContent {
             mTTDTheme {
@@ -68,22 +64,19 @@ class MainActivity : ComponentActivity() {
                 val wizardCompleted by produceState<Boolean?>(initialValue = null, prefs) {
                     prefs.wizardCompleted.collect { value = it }
                 }
-                val state by shizuku.state.collectAsStateWithLifecycle()
 
                 Surface(color = MaterialTheme.colorScheme.background) {
                     when (val done = wizardCompleted) {
                         null -> Unit
                         else -> if (done) {
                             OnboardingScreen(
-                                state = state,
-                                onRequestPermission = { shizuku.requestPermissionOrBind() },
-                                userService = { shizuku.service },
+                                manager = access,
+                                userService = { access.service },
                                 onReopenWizard = { scope.launch { prefs.setWizardCompleted(false) } },
                             )
                         } else {
                             SetupWizardScreen(
-                                state = state,
-                                onRequestPermission = { shizuku.requestPermissionOrBind() },
+                                manager = access,
                                 onFinished = { scope.launch { prefs.setWizardCompleted(true) } },
                             )
                         }
@@ -95,24 +88,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        val shizuku = TrackerApplication.instance.shizukuManager
-        // 다른 앱에서 돌아왔을 때 Shizuku 상태 재조회 (권한이 방금 grant 됐을 수 있음).
-        //
-        // 권한 요청 다이얼로그까지 띄우는 건 이 화면에 처음 들어왔을 때 한 번이면 된다.
-        // 미승인 상태로 앱을 들락날락할 때마다 다이얼로그가 다시 뜨는 게 예전 동작이었다.
-        // 사용자가 직접 권한 버튼을 누르는 길(onRequestPermission)은 그대로 있다.
-        if (permissionRequested) shizuku.bindIfPermitted() else shizuku.requestPermissionOrBind()
-        permissionRequested = true
-        // Shizuku 준비되면 폴러 자동 시작 (이미 실행 중이면 no-op)
+        // 저장된 연결이 있으면 조용히 재시도 — 페어링 화면은 띄우지 않는다.
+        // 최초 페어링은 설정 마법사/설정 탭의 카드에서만 사용자가 직접 시작한다.
+        TrackerApplication.instance.accessManager.retryConnect()
+        // 로그 연결이 준비되면 폴러 자동 시작 (이미 실행 중이면 no-op)
         autoStartTracker()
     }
 
     /**
-     * 서비스를 띄우기만 하고, Shizuku 대기 · 게임 패키지 탐색 · 폴러 시작은 서비스에 맡긴다.
+     * 서비스를 띄우기만 하고, 연결 대기 · 게임 패키지 탐색 · 폴러 시작은 서비스에 맡긴다.
      *
-     * 예전에는 여기서 `if (!shizuku.state.value.ready) return` 으로 조기 종료했는데,
-     * Shizuku 바인딩이 비동기라 **첫 onResume 에서는 거의 항상 not-ready** 였다.
-     * 그래서 앱을 한 번 나갔다 들어와야(두 번째 onResume) 트래킹이 시작됐다.
+     * 예전에는 여기서 준비 상태를 보고 조기 종료했는데, 연결이 비동기라 **첫 onResume 에서는
+     * 거의 항상 not-ready** 였다. 그래서 앱을 한 번 나갔다 들어와야(두 번째 onResume)
+     * 트래킹이 시작됐다.
      */
     private fun autoStartTracker() {
         val app = TrackerApplication.instance

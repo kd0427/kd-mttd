@@ -2,7 +2,7 @@
 
 소스에서 직접 빌드해서 설치하려는 개발자·기여자용 문서다. GitHub Release APK 를
 받아 쓰는 일반 사용자는 **[README.md](README.md)** 의 "설치와 사용법"을 참고하면 된다
-(Shizuku 준비, 최초 실행 설정, HUD 사용법 모두 그쪽에 있다 — 빌드한 APK 도 동일하게 동작).
+(무선 디버깅 연결, 최초 실행 설정, HUD 사용법 모두 그쪽에 있다 — 빌드한 APK 도 동일하게 동작).
 
 ---
 
@@ -11,8 +11,11 @@
 | 항목 | 요구사항 |
 |---|---|
 | JDK | 17 |
-| Android SDK | Platform 34, Build-Tools 34.0.0 |
-| 기기 | Android 10 (API 29) 이상, 게임 설치됨, Shizuku 준비됨 |
+| Android SDK | Platform 34, Build-Tools 34.0.0, **NDK 29.0.13113456, CMake 3.22.1** |
+| 기기 | Android 11 (API 30) 이상, 게임 설치됨, 무선 디버깅 켜짐 |
+
+NDK/CMake 는 무선 adb 페어링용 네이티브 코드(`app/src/main/jni`)를 빌드하는 데 쓴다. NDK 버전은
+`app/build.gradle.kts` 의 `ndkVersion` 과 정확히 일치해야 한다 — 다른 버전은 헤더 조합이 깨진다.
 
 ---
 
@@ -39,7 +42,8 @@ Android SDK 구성요소가 아직 없다면, Google SDK 라이선스를 검토�
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 yes | sdkmanager --sdk_root=/opt/homebrew/share/android-commandlinetools --licenses
 sdkmanager --sdk_root=/opt/homebrew/share/android-commandlinetools \
-  "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+  "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
+  "ndk;29.0.13113456" "cmake;3.22.1"
 ```
 
 ### 릴리스 빌드
@@ -113,8 +117,9 @@ adb logcat -d | grep "mTTD.Prices"
 ```bash
 adb logcat -d | grep "mTTD.Service"
 ```
-`poller started:` 가 없다면 Shizuku가 끊긴 것이다 (재부팅 후 흔함). Shizuku 앱에서
-다시 시작한 뒤, 트래커 앱을 한 번 연다.
+`poller started:` 가 없다면 무선 adb 연결이 끊긴 것이다 (재부팅 후 흔함 — 재부팅하면 무선
+디버깅 자체가 꺼진다). 개발자 옵션에서 무선 디버깅을 다시 켜고, WiFi 에 연결한 상태로 트래커
+앱을 한 번 열면 저장된 페어링 키로 다시 붙는다 (코드 재입력 불필요).
 
 ### 오버레이가 안 보임
 
@@ -140,5 +145,5 @@ adb uninstall com.doyoon.kdmttd.debug
 adb uninstall com.doyoon.kdmttd
 ```
 
-앱을 삭제하면 끝이다. 게임 쪽에는 아무것도 남기지 않는다. Shizuku 를 다른 앱에서 안 쓴다면
-같이 지우고, 개발자 옵션의 무선 디버깅도 꺼주면 된다.
+앱을 삭제하면 끝이다. 게임 쪽에는 아무것도 남기지 않는다. 개발자 옵션의 무선 디버깅도 꺼주면
+된다 — shell UID 데몬은 앱과 1 시간 이상 통신하지 못하면 스스로 종료하고, 재부팅하면 바로 사라진다.

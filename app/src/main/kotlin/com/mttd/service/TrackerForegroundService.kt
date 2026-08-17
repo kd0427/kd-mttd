@@ -18,7 +18,6 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import com.mttd.MainActivity
-import com.mttd.R
 import com.mttd.TrackerApplication
 import com.mttd.data.items.ItemInfoLookup
 import com.mttd.data.log.LogLineFilter
@@ -356,27 +355,30 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
      * 오버레이만 띄우거나 시스템이 서비스를 재시작한 상태에서는 로그를 아예 안 읽었다.
      * → "가방 정렬하고 앱을 다녀와야 동작" 의 직접 원인.
      *
-     * Shizuku 가 아직 준비 안 됐으면 준비될 때까지 재시도한다.
+     * 로그 접근이 아직 준비 안 됐으면 준비될 때까지 재시도한다.
      */
     @Synchronized
     fun ensurePollerRunning() {
         if (poller != null || pollerBootstrap?.isActive == true) return
         pollerBootstrap = lifecycleScope.launch {
-            val shizuku = TrackerApplication.instance.shizukuManager
+            val access = TrackerApplication.instance.accessManager
             while (poller == null) {
-                if (!shizuku.state.value.ready) {
-                    // 권한 요청 다이얼로그는 띄우지 않는다 (3 초마다 반복될 수 있으므로).
-                    // 권한 승인은 앱 UI 에서만 하고, 여기서는 바인딩만 재시도.
-                    shizuku.bindIfPermitted()
+                if (!access.ready.value) {
+                    // 페어링 화면은 띄우지 않는다 (3 초마다 반복될 수 있으므로).
+                    // 최초 페어링은 앱 UI 에서만 하고, 여기서는 저장된 연결로 재접속만 시도.
+                    updateNotification(TEXT_DISCONNECTED, DETAIL_DISCONNECTED)
+                    access.retryConnect()
                     kotlinx.coroutines.delay(POLLER_BOOTSTRAP_RETRY_MS)
                     continue
                 }
-                val path = resolveLogPath(shizuku.service)
+                val path = resolveLogPath(access.service)
                 if (path == null) {
+                    updateNotification(TEXT_WAITING_GAME)
                     kotlinx.coroutines.delay(POLLER_BOOTSTRAP_RETRY_MS)
                     continue
                 }
                 startPoller(path)
+                updateNotification(TEXT_WATCHING)
             }
         }
     }
@@ -394,9 +396,9 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
 
     private fun startPoller(path: String) {
         stopPoller()
-        val shizuku = TrackerApplication.instance.shizukuManager
+        val access = TrackerApplication.instance.accessManager
         val p = LogPoller(
-            service = { shizuku.service },
+            service = { access.service },
             offsetStore = offsetStore,
             logPath = path,
         )
@@ -436,7 +438,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     /**
-     * Shizuku·폴러·오버레이 권한이 모두 갖춰졌으면 오버레이를 자동으로 표시.
+     * 로그 연결·폴러·오버레이 권한이 모두 갖춰졌으면 오버레이를 자동으로 표시.
      *
      * 사용자가 명시적으로 숨긴 상태(HUD 접기와 별개로 오버레이 자체를 끈 경우)는 존중해야 하므로
      * 이미 붙어 있으면 아무것도 하지 않는다 ([ensureOverlay] 가 멱등).
@@ -510,7 +512,8 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
 
     private fun startForegroundOnce() {
         foregroundStarted = true
-        val notif = buildNotification("로그 감시 중")
+        notifText = TEXT_WATCHING
+        val notif = buildNotification(TEXT_WATCHING)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIF_ID,
@@ -537,7 +540,29 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         }
     }
 
-    private fun buildNotification(text: String): Notification {
+    /** 지금 알림에 떠 있는 문구. 같은 값으로 다시 notify 하지 않으려고 들고 있는다. */
+    private var notifText: String? = null
+
+    /**
+     * 상주 알림 문구를 바꾼다.
+     *
+     * 게임을 하는 동안 사용자가 보는 건 오버레이뿐이라, 로그 연결이 끊긴 걸(재부팅 후 무선
+     * 디버깅이 꺼진 경우 등) 앱을 열기 전엔 알 방법이 없었다 — 수치가 안 늘어나는 걸로만
+     * 눈치채야 했다. 이미 떠 있는 알림에 상태와 할 일을 적어준다.
+     */
+    private fun updateNotification(text: String, detail: String? = null) {
+        if (!foregroundStarted || text == notifText) return
+        notifText = text
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIF_ID, buildNotification(text, detail))
+    }
+
+    /**
+     * [text] 는 **접힌 알림 한 줄에 들어가야 한다** — 실측상 한글 22 자쯤에서 잘리므로, 길게
+     * 쓰면 정작 할 일이 말줄임표 뒤로 사라진다. 자세한 안내는 [detail] 로 넘겨서 펼쳤을 때만
+     * 보이게 한다.
+     */
+    private fun buildNotification(text: String, detail: String? = null): Notification {
         val pi = PendingIntent.getActivity(
             this,
             0,
@@ -545,25 +570,35 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.app_name))
+            // 제목을 따로 안 준다 — 시스템이 알림 헤더에 이미 앱 이름을 그리므로, 여기에
+            // app_name 을 또 넣으면 펼쳤을 때 "고인물 mTTD" 가 두 줄로 겹쳐 보인다.
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentIntent(pi)
             .setOngoing(true)
             .setShowWhen(false)
+            .apply { if (detail != null) setStyle(NotificationCompat.BigTextStyle().bigText(detail)) }
             .build()
     }
 
     companion object {
         private const val TAG = "mTTD.Service"
         private const val CHANNEL_ID = "tli_log_watch"
+        private const val TEXT_WATCHING = "로그 감시 중"
+        // 접힌 알림 한 줄을 넘기지 말 것 (buildNotification 주석 참고).
+        private const val TEXT_DISCONNECTED = "연결 끊김 — 무선 디버깅을 켜주세요"
+        private const val DETAIL_DISCONNECTED =
+            "게임 로그를 읽지 못하는 중이라 수익이 집계되지 않습니다.\n\n" +
+                "휴대폰을 재부팅하면 무선 디버깅이 꺼집니다. 개발자 옵션에서 다시 켜고 WiFi 에 " +
+                "연결한 뒤 이 알림을 누르면 자동으로 다시 연결됩니다 (페어링 코드는 다시 입력하지 않아도 됩니다)."
+        private const val TEXT_WAITING_GAME = "게임 실행 대기 중"
         private const val NOTIF_ID = 42
         /** 시세 TTL 과 동일 (PriceRepository.TTL_MS = 1h). */
         private const val PRICE_REFRESH_INTERVAL_MS = 60L * 60 * 1000
         private const val PRICE_RETRY_INTERVAL_MS = 60L * 1000
         /** 실패가 이어질 때의 재시도 상한 — 여기까지 두 배씩 늘어난다. */
         private const val PRICE_RETRY_MAX_MS = 30L * 60 * 1000
-        /** Shizuku 준비 / 게임 패키지 탐색 재시도 간격. */
+        /** 로그 연결 준비 / 게임 패키지 탐색 재시도 간격. */
         private const val POLLER_BOOTSTRAP_RETRY_MS = 3_000L
         private const val MAX_RECENT_DEBUG_LINES = 10
         const val ACTION_START = "com.mttd.action.START_LOG"
@@ -584,7 +619,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
 
         /**
          * 로그 경로를 모르는 상태에서 서비스만 띄운다.
-         * 서비스가 Shizuku 준비를 기다렸다가 스스로 게임 패키지를 찾아 폴링을 시작한다.
+         * 서비스가 로그 연결 준비를 기다렸다가 스스로 게임 패키지를 찾아 폴링을 시작한다.
          */
         fun startSelfManaged(context: Context) {
             val i = Intent(context, TrackerForegroundService::class.java).apply {

@@ -14,6 +14,7 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
 import androidx.lifecycle.Observer
+import com.mttd.R
 import com.mttd.TrackerApplication
 import com.mttd.data.adb.AdbMdns
 import kotlinx.coroutines.CoroutineScope
@@ -130,7 +131,7 @@ class DirectAdbPairingService : Service() {
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("무선 디버깅 페어링 서비스 찾는 중...")
             .setContentText("설정 → 개발자 옵션 → 무선 디버깅 → \"페어링 코드로 기기 페어링\"을 열어주세요")
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_stat_mttd)
             .setOngoing(true)
             .addAction(NotificationCompat.Action.Builder(0, "중지", stopPendingIntent()).build())
             .build()
@@ -143,7 +144,7 @@ class DirectAdbPairingService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("페어링 서비스를 찾았습니다")
             .setContentText("이 알림을 펼쳐서, 화면에 뜬 6자리 코드를 입력하세요")
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_stat_mttd)
             .setOngoing(true)
             .addAction(replyAction)
             .build()
@@ -152,7 +153,7 @@ class DirectAdbPairingService : Service() {
     private fun workingNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("페어링 중...")
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_stat_mttd)
             .setOngoing(true)
             .build()
 
@@ -162,7 +163,7 @@ class DirectAdbPairingService : Service() {
             NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle(if (success) "페어링 성공" else "페어링 실패")
                 .setContentText(message)
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setSmallIcon(R.drawable.ic_stat_mttd)
                 .setAutoCancel(true)
                 .build()
         )

@@ -1,0 +1,17 @@
+<!--
+  상태바 알림 아이콘.
+
+  안드로이드는 smallIcon 을 **알파 채널만** 읽어서 단색으로 칠한다 — 런처 아이콘
+  (ic_mttd_launcher)은 알파가 꽉 찬 사각형이라 그대로 쓰면 흰 사각형 덩어리로 보인다.
+  그래서 로고에서 제일 알아보기 쉬운 물방울 윤곽만 따로 그린 실루엣을 쓴다.
+  (알림 서랍의 원형 아이콘은 이것과 무관하게 시스템이 런처 아이콘을 그린다.)
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2 C12,2 5,10 5,14.5 C5,18.4 8.1,21.5 12,21.5 C15.9,21.5 19,18.4 19,14.5 C19,10 12,2 12,2 Z" />
+</vector>

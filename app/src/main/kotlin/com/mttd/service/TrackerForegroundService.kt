@@ -17,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
+import com.mttd.R
 import com.mttd.MainActivity
 import com.mttd.TrackerApplication
 import com.mttd.data.items.ItemInfoLookup
@@ -528,15 +529,16 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     private fun ensureNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-                nm.createNotificationChannel(
-                    NotificationChannel(
-                        CHANNEL_ID,
-                        "KD mTTD 로그 감시",
-                        NotificationManager.IMPORTANCE_LOW,
-                    ).apply { description = "게임 로그 파일을 폴링하는 백그라운드 서비스" }
-                )
-            }
+            // 조건 없이 부른다 — createNotificationChannel 은 같은 id 가 이미 있으면 이름과
+            // 설명을 갱신한다. 예전에 만든 채널을 쓰는 기존 사용자에게도 바뀐 문구가 보여야 한다
+            // (importance 같은 사용자 설정은 이 호출로 덮이지 않는다).
+            nm.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "토치 로그 수집",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply { description = "토치라이트 로그를 읽어 수익을 집계하는 백그라운드 서비스" }
+            )
         }
     }
 
@@ -573,7 +575,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             // 제목을 따로 안 준다 — 시스템이 알림 헤더에 이미 앱 이름을 그리므로, 여기에
             // app_name 을 또 넣으면 펼쳤을 때 "고인물 mTTD" 가 두 줄로 겹쳐 보인다.
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_stat_mttd)
             .setContentIntent(pi)
             .setOngoing(true)
             .setShowWhen(false)
@@ -584,7 +586,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     companion object {
         private const val TAG = "mTTD.Service"
         private const val CHANNEL_ID = "tli_log_watch"
-        private const val TEXT_WATCHING = "로그 감시 중"
+        private const val TEXT_WATCHING = "토치 로그 수집 중"
         // 접힌 알림 한 줄을 넘기지 말 것 (buildNotification 주석 참고).
         private const val TEXT_DISCONNECTED = "연결 끊김 — 무선 디버깅을 켜주세요"
         private const val DETAIL_DISCONNECTED =

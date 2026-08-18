@@ -85,6 +85,14 @@ data class SessionState(
     val inExchange: Boolean = false,
     /** 거래소 진입 시점(또는 수동 새로고침 시점)의 현재 보유 아이템, 가치 내림차순. */
     val holdings: List<PickupSummary> = emptyList(),
+
+    /**
+     * 로그를 못 읽고 있는 상태인지 ([com.mttd.data.log.LogPoller.PollingStatus.lastError]).
+     *
+     * 시계는 로그와 무관한 벽시계라 스트림이 끊겨도 계속 흐른다. 이 표시가 없으면 화면은
+     * "진행중" 인 채로 수익만 0 에 멈춰 있어서, 집계가 고장 난 것처럼 보인다.
+     */
+    val logStalled: Boolean = false,
 ) {
     /**
      * 경과 시간. baseline (가방 정렬) 관측 전에는 0.

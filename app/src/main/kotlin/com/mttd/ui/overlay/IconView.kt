@@ -239,6 +239,8 @@ fun IconOverlay(
                 else -> Color(0xFFCBD5E1)
             }
             val status = when {
+                // HudView 와 같은 순서 — 끊김이면 나머지 판정은 굳은 값이라 먼저 알려야 한다.
+                session.logStalled -> "끊김"
                 session.paused -> "중지중"
                 !session.baselineReady -> "로그·가방"
                 session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "대기중"
@@ -246,6 +248,7 @@ fun IconOverlay(
             }
             val statusColor = when (status) {
                 "진행중" -> Color(0xFF4ADE80)
+                "끊김" -> Color(0xFFEF4444)
                 "중지중" -> Color(0xFFF87171)
                 "로그·가방" -> Color(0xFFFB923C)
                 else -> Color(0xFF94A3B8) // 대기중

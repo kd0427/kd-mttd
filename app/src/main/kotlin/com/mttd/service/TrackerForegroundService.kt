@@ -432,6 +432,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
                 }
             }
         }
+        pollerJobs += lifecycleScope.launch { watchPollerStall(p) }
         p.start()
         Log.i(TAG, "poller started: $path")
         // 준비가 다 끝났으면(오버레이 권한 있음) 굳이 버튼을 누르게 하지 않고 바로 띄운다.
@@ -459,6 +460,57 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         }
     }
 
+    /**
+     * 로그가 끊긴 채로 방치되는 걸 막는다.
+     *
+     * 데몬 Binder 가 죽으면 [com.mttd.data.adb.DirectAdbManager] 는 `service` 를 죽은 stub 그대로
+     * 두고 `ready` 도 참으로 남긴다 (그쪽 주석 참고). 그러면 폴러는 "파일 못 읽음" 을 영원히
+     * 반복하는데, [ensurePollerRunning] 의 재연결 루프는 폴러가 살아 있으면 아예 안 돌아서
+     * 앱을 직접 열기 전까지(`MainActivity.onResume` 의 `retryConnect`) 아무도 복구하지 않았다 —
+     * 시계는 로그와 무관한 벽시계라 계속 흐르고 수익만 0 에 멈춘다.
+     *
+     * **폴러는 재시작하지 않는다.** 폴러가 `service` 를 매 폴링마다 다시 읽으므로 재연결만
+     * 성공하면 지금 폴러가 그대로 살아난다. 재시작하면 [LogPoller.stop] 주석의 offset 되감기로
+     * 같은 구간을 다시 읽어 맵핑 횟수가 부풀려진다.
+     */
+    private suspend fun watchPollerStall(p: LogPoller) {
+        /** 끊김이 이어진 연속 확인 횟수. */
+        var stalledSamples = 0
+        /** 다음 재연결까지 건너뛸 확인 횟수. 계속 실패하면 두 배씩 늘어난다. */
+        var retryEvery = STALL_RETRY_MIN_SAMPLES
+        var untilRetry = 0
+        while (true) {
+            kotlinx.coroutines.delay(STALL_CHECK_INTERVAL_MS)
+            if (p.status.value.lastError == null) {
+                if (stalledSamples >= STALL_SAMPLES_BEFORE_ACTING) {
+                    aggregator.setLogStalled(false)
+                    updateNotification(TEXT_WATCHING)
+                    Log.i(TAG, "log stream recovered")
+                }
+                stalledSamples = 0
+                retryEvery = STALL_RETRY_MIN_SAMPLES
+                untilRetry = 0
+                continue
+            }
+            // 일시적인 읽기 실패 한 번으로는 안 움직인다 — 연속으로 이어질 때만 진짜 끊김으로 본다.
+            // (한 번에 반응하면 알림 문구와 HUD 표시가 깜빡인다.)
+            if (++stalledSamples < STALL_SAMPLES_BEFORE_ACTING) continue
+
+            aggregator.setLogStalled(true)
+            updateNotification(TEXT_DISCONNECTED, DETAIL_DISCONNECTED)
+
+            // 안 붙는 상황이 길어지면(재부팅 후 무선 디버깅 꺼짐 등) 재연결 시도 자체가 배터리라
+            // 시도 간격만 두 배씩 늘린다. **확인 주기는 늘리지 않는다** — 여기서 그냥 오래 delay
+            // 하면 로그가 이미 돌아왔는데도 그만큼 "끊김" 표시가 남는다 (에뮬레이터 실측: 백오프
+            // 30초 구간에서 복구를 50초 늦게 알아챘고, 상한까지 늘면 10분이 된다).
+            if (untilRetry > 0) { untilRetry--; continue }
+            Log.w(TAG, "log stream stalled (${p.status.value.lastError}) — reconnecting")
+            TrackerApplication.instance.accessManager.retryConnect()
+            untilRetry = retryEvery
+            retryEvery = (retryEvery * 2).coerceAtMost(STALL_RETRY_MAX_SAMPLES)
+        }
+    }
+
     private fun stopPoller() {
         pollerBootstrap?.cancel()
         pollerBootstrap = null
@@ -466,6 +518,9 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         pollerJobs.clear()
         poller?.stop()
         poller = null
+        // 감시 잡이 같이 죽으므로 여기서 표시를 내려둔다 — 안 그러면 끊긴 채로 폴러를 갈아끼울 때
+        // "끊김" 이 새 폴러에 그대로 얹혀 남는다.
+        aggregator.setLogStalled(false)
     }
 
     /** 폴러·오버레이·알림을 걷고 서비스를 내린다. 액티비티는 그대로 남는다. */
@@ -603,6 +658,14 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         private const val PRICE_RETRY_MAX_MS = 30L * 60 * 1000
         /** 로그 연결 준비 / 게임 패키지 탐색 재시도 간격. */
         private const val POLLER_BOOTSTRAP_RETRY_MS = 3_000L
+        /** 폴러가 로그를 못 읽고 있는지 확인하는 주기 ([watchPollerStall]). */
+        private const val STALL_CHECK_INTERVAL_MS = 15_000L
+        /** 이만큼 연속으로 실패해야 진짜 끊김으로 본다 (15초 × 2 = 30초). */
+        private const val STALL_SAMPLES_BEFORE_ACTING = 2
+        /** 재연결 시도 간격 — [STALL_CHECK_INTERVAL_MS] 몇 번마다 시도할지. 2 회 = 30 초. */
+        private const val STALL_RETRY_MIN_SAMPLES = 2
+        /** 계속 실패할 때 재연결 시도 간격의 상한. 40 회 = 10 분. */
+        private const val STALL_RETRY_MAX_SAMPLES = 40
         private const val MAX_RECENT_DEBUG_LINES = 10
         const val ACTION_START = "com.mttd.action.START_LOG"
         const val ACTION_STOP = "com.mttd.action.STOP_LOG"

@@ -89,6 +89,8 @@ class SessionAggregator(
             paused = prev.paused,
             pausedSinceMs = if (prev.paused) System.currentTimeMillis() else null,
             inExchange = prev.inExchange,
+            // 로그 연결 상태도 "지금 상태" 다 — 리셋으로 지우면 끊긴 채로 "진행중" 이 다시 뜬다.
+            logStalled = prev.logStalled,
         )
         slotLastCount.clear()
         slotKeyByPosition.clear()
@@ -149,6 +151,14 @@ class SessionAggregator(
     /** 설정 화면에서 고른 시간 집계 기준을 즉시 반영한다. */
     fun setTimeTrackingMode(mode: TimeTrackingMode) {
         _state.update { if (it.timeTrackingMode == mode) it else it.copy(timeTrackingMode = mode) }
+    }
+
+    /**
+     * 로그를 읽지 못하는 상태인지 서비스가 알려준다 (표시 전용 — 집계는 건드리지 않는다).
+     * 판정은 폴러 상태를 보는 [com.mttd.service.TrackerForegroundService] 쪽에 있다.
+     */
+    fun setLogStalled(stalled: Boolean) {
+        _state.update { if (it.logStalled == stalled) it else it.copy(logStalled = stalled) }
     }
 
     /** 거래소 진입 시 우리가 자동으로 걸었던 pause 인지 — 유저가 직접 pause 한 건 우리가 안 푼다. */

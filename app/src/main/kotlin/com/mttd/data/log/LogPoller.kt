@@ -154,6 +154,11 @@ class LogPoller(
                 inaccessible = false
                 idleCount = 0
                 intervalMs = MIN_INTERVAL_MS
+                // 여기가 "다시 읽힌다" 가 확정되는 유일한 지점이다. lastError 를 성공적으로 **읽은**
+                // 시점에서만 지우면, 파일은 다시 열리는데 게임이 아직 안 켜져 있어 안 자라는 구간
+                // 내내 오류가 남는다 — 그 상태를 서비스가 "끊김" 으로 읽어서, 무선 디버깅을 이미
+                // 다시 켠 사용자에게 "무선 디버깅을 켜주세요" 를 계속 띄운다.
+                _status.value = _status.value.copy(lastError = null)
             }
 
             if (size < offset) {

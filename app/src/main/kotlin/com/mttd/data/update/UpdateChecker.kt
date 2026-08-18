@@ -70,7 +70,7 @@ class UpdateChecker {
                 releaseUrl = rel.htmlUrl,
                 apkUrl = apk?.browserDownloadUrl,
                 apkSizeBytes = apk?.size ?: 0,
-                notes = rel.body.orEmpty().trim().take(600),
+                notes = userFacingNotes(rel.body),
             )
             Log.i(TAG, "update available: $current -> $latest")
             CheckResult.UpdateAvailable(update)
@@ -132,6 +132,22 @@ class UpdateChecker {
             .callTimeout(15, TimeUnit.SECONDS)
             .connectTimeout(10, TimeUnit.SECONDS)
             .build()
+
+        /**
+         * 릴리스 본문에서 **사용자에게 보여줄 부분만** 뽑는다.
+         *
+         * 본문은 `RELEASE_NOTES.md` 에 적어 둔 사용자용 설명 뒤에 GitHub 이 만든
+         * `**Full Changelog**: https://...compare/...` 가 붙은 모양이다. 그 링크는 카드에서
+         * 굵은 라벨 + 생 URL 로 보일 뿐 아무 도움이 안 되므로 잘라낸다.
+         *
+         * **자르기를 길이 제한보다 먼저 한다.** 순서를 바꾸면 URL 이 600 자를 잡아먹어 정작
+         * 설명이 문장 중간에서 끊긴다.
+         */
+        fun userFacingNotes(body: String?): String {
+            val text = body.orEmpty().replace("\r\n", "\n")
+            val cut = text.indexOf("**Full Changelog**")
+            return (if (cut >= 0) text.substring(0, cut) else text).trim().take(600)
+        }
 
         /**
          * `1.2.10` vs `1.3.0` 같은 semver 비교. 숫자 파트만 본다.

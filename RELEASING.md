@@ -23,8 +23,15 @@ base64 < release.jks | tr -d '\n'
 
 ## 새 버전 배포
 
-1. [app/build.gradle.kts](app/build.gradle.kts)의 `versionCode`를 이전보다 크게 올리고 `versionName`을 새 버전으로 바꾼다.
-2. **릴리스 빌드가 통과하는지 로컬에서 먼저 확인한다.**
+1. [RELEASE_NOTES.md](RELEASE_NOTES.md) 맨 위에 `# <새 버전>` 섹션을 추가하고 **바뀐 내용을 사용자 말로** 적는다.
+
+   이 글이 앱의 업데이트 카드에 그대로 뜬다. 워크플로가 이 섹션을 릴리스 본문 앞에 넣고, 자동
+   생성 변경로그는 그 뒤에 붙는다. 섹션을 빠뜨려도 릴리스는 나가지만 **카드에는 compare 링크
+   한 줄만 떠서 사용자가 뭐가 바뀌었는지 알 수 없다** (워크플로 로그에 경고로 남는다).
+   쓰는 규칙은 그 파일 맨 위 주석에 있다.
+
+2. [app/build.gradle.kts](app/build.gradle.kts)의 `versionCode`를 이전보다 크게 올리고 `versionName`을 새 버전으로 바꾼다.
+3. **릴리스 빌드가 통과하는지 로컬에서 먼저 확인한다.**
 
    ```bash
    ./gradlew :app:assembleRelease
@@ -41,8 +48,8 @@ base64 < release.jks | tr -d '\n'
    > grep -c "^com.mttd.data.adb.starter.DirectDaemonStarter ->" app/build/outputs/mapping/release/mapping.txt
    > ```
 
-3. 변경을 `main`에 커밋하고 푸시한다.
-4. 같은 버전의 tag를 만들고 푸시한다.
+4. 변경을 `main`에 커밋하고 푸시한다.
+5. 같은 버전의 tag를 만들고 푸시한다.
 
 ```bash
 git tag v0.5.8
@@ -81,10 +88,16 @@ gh release delete v0.5.9 --repo kd0427/kd-mttd --yes
 
 ## 릴리스 노트
 
-워크플로는 `generate_release_notes: true`로 만들기 때문에 본문이 `Full Changelog` 한 줄뿐이다. 바뀐 내용을 직접 쓰려면 릴리스가 만들어진 뒤에 덧붙인다.
+본문은 [RELEASE_NOTES.md](RELEASE_NOTES.md) 의 해당 버전 섹션(사용자용) + 자동 생성 변경로그로
+만들어진다. 앱의 업데이트 카드는 **앞쪽 사용자용 설명만** 보여준다 (`UpdateChecker.userFacingNotes`
+가 `**Full Changelog**` 부터 잘라낸다).
+
+이미 나간 릴리스의 본문을 고쳐야 하면:
 
 ```bash
 gh release edit v0.5.8 --repo kd0427/kd-mttd --notes-file notes.md
 ```
+
+이때도 자동 변경로그 줄을 직접 붙여야 그대로 유지된다 — `--notes-file` 은 본문을 통째로 바꾼다.
 
 > `gh`는 이 저장소에서 remote가 둘(`origin`=내 포크, `upstream`=원본)이라 **`--repo kd0427/kd-mttd`를 반드시 붙인다.** 안 붙이면 원본 저장소를 향한다. 기본 저장소를 포크로 고정해 두긴 했지만(`gh repo set-default`, `CUSTOMIZATION.md` 참고) 그 설정은 `.git/config`에만 있어서 새로 clone 하면 사라진다.

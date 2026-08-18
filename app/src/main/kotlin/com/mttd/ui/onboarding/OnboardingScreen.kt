@@ -376,7 +376,9 @@ private fun UpdateBanner(expandSignal: Int = 0) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (u.notes.isNotBlank()) {
-                    Text(parseSimpleMarkdown(u.notes), style = MaterialTheme.typography.bodySmall, maxLines = 6)
+                    // 6 줄이면 항목 3 개짜리 설명도 문장 중간에서 잘린다. 카드는 사용자가
+                    // 직접 펼쳤을 때만 보이므로 길이를 아낄 이유가 없다.
+                    Text(parseSimpleMarkdown(u.notes), style = MaterialTheme.typography.bodySmall)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (u.apkUrl != null) {

@@ -247,6 +247,9 @@ fun HudOverlay(
                     // 끊김이 최우선 — 로그가 안 들어오면 아래 판정들은 전부 끊기기 직전에
                     // 굳은 값이라, 그걸 그대로 "진행중" 으로 보여주면 거짓말이 된다.
                     session.logStalled -> "● 끊김"
+                    // 게임 부재는 우리가 pause 를 걸어 만든 상태라 paused 보다 먼저 봐야 한다 —
+                    // "중지중" 으로 보이면 유저가 자기가 멈춘 줄 알고 재생을 누른다.
+                    session.gameAway -> "● 게임 꺼짐"
                     session.paused -> "● 중지중"
                     !session.baselineReady -> "● 로그·가방"
                     session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "● 대기중"
@@ -254,6 +257,7 @@ fun HudOverlay(
                 }
                 val statusColor = when {
                     session.logStalled -> Color(0xFFEF4444)
+                    session.gameAway -> Color(0xFF94A3B8)
                     session.paused -> Color(0xFFF87171)
                     !session.baselineReady -> Color(0xFFFB923C)
                     session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> Color(0xFF94A3B8)

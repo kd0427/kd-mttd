@@ -409,7 +409,15 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         // 스스로 끝나지 않아서, 예전엔 폴러를 다시 시작할 때마다 옛 폴러와 코루틴 2 개가
         // 서비스가 살아 있는 내내 남았다. 게다가 옛 status 수집이 stop() 의 active=false 를
         // 뒤늦게 흘려보내 새 폴러의 상태 표시를 뒤집을 수도 있다.
-        pollerJobs += lifecycleScope.launch { p.status.collect { _status.value = it } }
+        pollerJobs += lifecycleScope.launch {
+            p.status.collect {
+                _status.value = it
+                // 로그가 다시 자라는 순간 여기로 새 상태가 흘러오므로, 게임 복귀는 15 초 주기
+                // 감시([watchPollerStall])를 기다리지 않고 즉시 반영된다 — 그 지연만큼이 그대로
+                // 안 세어지는 플레이 시간이 된다.
+                updateGameAway(it)
+            }
+        }
         pollerJobs += lifecycleScope.launch {
             p.lines.collect { line ->
                 if (line.streamReset) {
@@ -473,6 +481,25 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
      * 성공하면 지금 폴러가 그대로 살아난다. 재시작하면 [LogPoller.stop] 주석의 offset 되감기로
      * 같은 구간을 다시 읽어 맵핑 횟수가 부풀려진다.
      */
+    /**
+     * "게임이 안 돌고 있다" 를 집계기에 알린다.
+     *
+     * 게임은 대기 중에도 초당 한 줄씩(Ping) 쓰므로, 로그가 한동안 안 자라면 게임이 없는 것이다
+     * ([LogPoller.PollingStatus.gameLikelyRunning] 의 판정을 그대로 쓴다 — 진단 화면의
+     * "게임 상태(추정)" 과 같은 기준이라 둘이 어긋나지 않는다).
+     *
+     * **못 읽는 상태(`lastError`)는 판단에서 제외한다.** 그때도 로그는 당연히 안 자라지만 그건
+     * 게임이 없어서가 아니라 우리가 눈을 감아서다 — 그걸 게임 부재로 세면 실제로 파밍 중인
+     * 시간이 조용히 안 쌓인다. 판단이 안 서는 동안은 직전 판단을 그대로 둔다.
+     */
+    private fun updateGameAway(s: LogPoller.PollingStatus) {
+        // lastGrowthAtMs == 0 은 "폴링 시작 후 한 줄도 못 받음" 이라 게임 부재와 구분이 안 된다.
+        // 다만 그 상태면 가방 스냅샷도 못 봤다는 뜻이라 baselineReady 가 false 고, 시계는
+        // 어차피 안 돈다 — 굳이 판정하지 않는다.
+        if (s.lastError != null || s.lastGrowthAtMs == 0L) return
+        aggregator.setGameAway(!s.gameLikelyRunning())
+    }
+
     private suspend fun watchPollerStall(p: LogPoller) {
         /** 끊김이 이어진 연속 확인 횟수. */
         var stalledSamples = 0
@@ -481,6 +508,9 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         var untilRetry = 0
         while (true) {
             kotlinx.coroutines.delay(STALL_CHECK_INTERVAL_MS)
+            // 게임이 사라지는 쪽은 여기서만 잡힌다 — 로그가 안 자라면 폴러 상태도 안 바뀌어
+            // 위 status 수집으로는 아무것도 안 흘러온다.
+            updateGameAway(p.status.value)
             if (p.status.value.lastError == null) {
                 if (stalledSamples >= STALL_SAMPLES_BEFORE_ACTING) {
                     aggregator.setLogStalled(false)
@@ -519,8 +549,10 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         poller?.stop()
         poller = null
         // 감시 잡이 같이 죽으므로 여기서 표시를 내려둔다 — 안 그러면 끊긴 채로 폴러를 갈아끼울 때
-        // "끊김" 이 새 폴러에 그대로 얹혀 남는다.
+        // "끊김" 이 새 폴러에 그대로 얹혀 남는다. 게임 부재 pause 도 같이 푼다: 판정할 폴러가
+        // 없는데 우리가 건 pause 만 남으면 아무도 못 푼다.
         aggregator.setLogStalled(false)
+        aggregator.setGameAway(false)
     }
 
     /** 폴러·오버레이·알림을 걷고 서비스를 내린다. 액티비티는 그대로 남는다. */

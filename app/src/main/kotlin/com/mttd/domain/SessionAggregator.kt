@@ -91,6 +91,7 @@ class SessionAggregator(
             inExchange = prev.inExchange,
             // 로그 연결 상태도 "지금 상태" 다 — 리셋으로 지우면 끊긴 채로 "진행중" 이 다시 뜬다.
             logStalled = prev.logStalled,
+            gameAway = prev.gameAway,
         )
         slotLastCount.clear()
         slotKeyByPosition.clear()
@@ -107,6 +108,8 @@ class SessionAggregator(
         // 거래소 상태를 그대로 들고 가므로, "이 pause 는 우리가 건 것" 이라는 표시도 같이
         // 유지해야 거래소를 닫을 때 자동으로 풀린다.
         pausedByExchange = pausedByExchange && prev.inExchange
+        // 게임 부재로 건 pause 도 마찬가지 — 상태를 그대로 들고 가므로 표시도 같이 유지한다.
+        pausedByGameAway = pausedByGameAway && prev.gameAway
     }
 
     fun pauseSession() {
@@ -159,6 +162,33 @@ class SessionAggregator(
      */
     fun setLogStalled(stalled: Boolean) {
         _state.update { if (it.logStalled == stalled) it else it.copy(logStalled = stalled) }
+    }
+
+    /** 게임 부재로 우리가 자동으로 걸었던 pause 인지 — 유저가 직접 pause 한 건 우리가 안 푼다. */
+    private var pausedByGameAway = false
+
+    /**
+     * 게임이 안 돌고 있다고 판단됐음을 서비스가 알려준다 (판정은 폴러 상태를 보는
+     * [com.mttd.service.TrackerForegroundService] 쪽에 있다).
+     *
+     * 시계를 세우는 방법으로 `inMap = false` 는 **쓰면 안 된다.** `inMap` 을 다시 true 로
+     * 되돌리는 경로는 맵 열기(`Spv3Open`)/맵 이름+지역 진입뿐이라, 게임이 돌아와도 이미 열어둔
+     * 맵 안이면 그 맵을 도는 내내 시계가 0 에 멈춘다 ([resetSession] 주석의 그 회귀와 같다).
+     * 그래서 위치는 그대로 두고 거래소와 같은 방식으로 pause 를 건다 — 이미 유저가 직접
+     * 멈춰 둔 세션은 건드리지 않고, 우리가 건 것만 우리가 푼다.
+     */
+    fun setGameAway(away: Boolean) {
+        if (_state.value.gameAway == away) return
+        _state.update { it.copy(gameAway = away) }
+        if (away) {
+            if (!_state.value.paused) {
+                pauseSession()
+                pausedByGameAway = true
+            }
+        } else if (pausedByGameAway) {
+            pausedByGameAway = false
+            resumeSession()
+        }
     }
 
     /** 거래소 진입 시 우리가 자동으로 걸었던 pause 인지 — 유저가 직접 pause 한 건 우리가 안 푼다. */

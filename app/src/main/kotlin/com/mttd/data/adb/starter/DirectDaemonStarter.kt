@@ -61,8 +61,18 @@ object DirectDaemonStarter {
      */
     private const val ANNOUNCE_INTERVAL_MS = 15_000L
 
-    /** 클래스 doc의 "자동 만료" 참조 — 넉넉하게 잡아 정상적인 재시작/백그라운드 전환 중 오탐 방지. */
-    private const val SELF_EXPIRE_AFTER_MS = 60 * 60_000L // 1시간
+    /**
+     * 클래스 doc의 "자동 만료" 참조 — 넉넉하게 잡아 정상적인 재시작/백그라운드 전환 중 오탐 방지.
+     *
+     * 처음엔 1 시간이었는데 실사용에서 이게 그대로 "1 시간마다 무선 디버깅을 다시 켜야 하는"
+     * 증상이 됐다. 매니페스트가 `stopWithTask=true` 라 최근 앱에서 스와이프하면 서비스까지
+     * 죽어서 앱 프로세스가 사라지고, 딱 1 시간 뒤 데몬이 자살한다. 그 뒤에 앱을 다시 켜면
+     * adb 재부트스트랩이 필요한데 그 사이 Android 가 무선 디버깅 토글까지 꺼둬서 결국 손으로
+     * 다시 켜야 했다. 데몬만 살아있으면 Binder 로 3 초 안에 재부착되고 adb 도 WiFi 도 필요
+     * 없으므로, 정리보다 생존을 우선해 사흘로 늘렸다 — 주말 내내 한 번도 안 켜도 월요일에
+     * 그대로 붙는다 (재부팅하면 어차피 사라진다).
+     */
+    private const val SELF_EXPIRE_AFTER_MS = 72 * 60 * 60_000L // 72시간
 
     @JvmStatic
     fun main(args: Array<String>) {

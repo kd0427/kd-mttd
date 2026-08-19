@@ -135,8 +135,9 @@ fun DirectAdbStatusCard(manager: DirectAdbManager) {
                 if (connected) {
                     Text(
                         "WiFi 를 꺼도 LTE 로 계속 집계됩니다.\n\n" +
-                            "재부팅하면 무선 디버깅이 꺼집니다. 다시 켜고 WiFi 에 연결한 채 이 화면을 열면 " +
-                            "자동으로 붙습니다 — 6자리 코드는 다시 입력하지 않습니다.",
+                            "무선 디버깅은 재부팅하거나 WiFi 가 잠깐 끊기면(절전·공유기 재접속) Android 가 " +
+                            "알아서 끕니다. 그러면 연결도 끊깁니다 — 다시 켜고 WiFi 에 연결한 채 이 화면을 " +
+                            "열면 자동으로 붙습니다. 6자리 코드는 다시 입력하지 않습니다.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +39,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -136,8 +139,8 @@ fun IconOverlay(
     controlFlow: Flow<Set<String>> = flowOf(MiniPanelControl.DEFAULT_IDS),
     /** true 면 수익을 경매장 세금(1/8) 뺀 실수령으로 보여준다. */
     netValueFlow: Flow<Boolean> = flowOf(false),
-    /** 패널 최대 폭(px)을 재는 함수. 값이 아니라 함수인 건 회전 때 다시 재기 위한 것. */
-    maxPanelWidthPx: (() -> Int)? = null,
+    /** 패널 최대 폭(dp)을 재는 함수. 값이 아니라 함수인 건 회전 때 다시 재기 위한 것. */
+    maxPanelWidthDp: (() -> Float)? = null,
     onTogglePause: () -> Unit = {},
     onReset: () -> Unit = {},
     onToggleItems: () -> Unit = {},
@@ -189,14 +192,16 @@ fun IconOverlay(
     // 항목을 빼면 패널은 내용만큼 짧아지고, 길어질 때만 카드 폭에서 멈춘다.
     //
     // 화면을 돌리면 가로 폭이 달라지므로 configuration 이 바뀔 때마다 다시 잰다. 그래서
-    // 값이 아니라 재실행할 수 있는 람다를 받는다 — 예전엔 마운트 시점에 한 번 잰 px 를
+    // 값이 아니라 재실행할 수 있는 람다를 받는다 — 예전엔 마운트 시점에 한 번 잰 폭을
     // 그대로 들고 있어서, 세로에서 켠 패널이 가로에서도 세로 폭을 최댓값으로 썼다.
-    val density = LocalDensity.current
+    //
+    // 단위가 px 가 아니라 dp 인 게 중요하다. 패널 축소 배율은 Compose 밀도로 걸리는데,
+    // 상한을 물리 px 로 받으면 밀도가 줄어든 만큼 dp 상한이 커져서 "화면 폭을 꽉 채운다"
+    // 는 결론이 배율과 무관하게 유지된다 — 항목을 많이 켜 상한에 걸린 패널은 배율을
+    // 낮춰도 글자만 작아지고 폭은 그대로였다. dp 로 받으면 상한이 배율과 함께 줄어든다.
     val configuration = LocalConfiguration.current
-    val maxPanelWidth = remember(configuration, density) {
-        // 서비스 오버레이의 Compose 밀도는 앱 본문과 다를 수 있다.
-        // 실제 px를 여기서 dp로 환산해야 카드와 정확히 같은 최대 폭이 된다.
-        maxPanelWidthPx?.invoke()?.let { pixels -> with(density) { pixels.toDp() } }
+    val maxPanelWidth = remember(configuration) {
+        maxPanelWidthDp?.invoke()?.dp
             ?: (configuration.screenWidthDp.dp - 40.dp).coerceAtLeast(260.dp)
     }
     val selectedControls = remember(selectedControlIds) {
@@ -223,79 +228,109 @@ fun IconOverlay(
         // 한 줄에 안 들어갈 때만 위 나눗셈이 이겨서 칸이 균등하게 좁아진다.
         .coerceAtMost(PREFERRED_METRIC_WIDTH.value)
         .dp
-    Box(
-        modifier = Modifier.wrapContentSize()
-            .background(Color(0xFF0F172A).copy(alpha = 0.9f), RoundedCornerShape(14.dp))
-            .border(1.dp, Color(0xFFE2E8F0).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-            .padding(horizontal = 5.dp, vertical = 3.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+    // 위 계산은 화면 폭을 기준으로 칸을 좁히지만, 창이 실제로 내주는 폭은 그보다 좁을 수
+    // 있다 — 그러면 오른쪽 버튼부터 화면 밖으로 잘려 나가고, 잘린 버튼은 존재 자체를 알
+    // 수 없다. 남는 폭에 맞춰 패널을 통째로 한 번 더 줄여 전부 보이게 한다.
+    //
+    // 설정에 저장된 배율은 건드리지 않는다. 항목을 다시 줄이면 여기서 알아서 원래 크기로
+    // 돌아온다 — 사용자가 고른 값과 화면 사정 때문에 깎인 값은 서로 다른 얘기다.
+    BoxWithConstraints {
+        val neededWidth = fixedWidth + metricWidth * selectedMetrics.size
+        // 창이 내주는 제약은 "지금 창의 크기" 라서, 한 번 줄이고 나면 다음 계산은 줄어든
+        // 창을 상한으로 본다. 그대로 쓰면 배율을 올렸다 내릴 때마다 패널이 조금씩 더
+        // 작아진다 (100%→80% 에서 785px 이어야 할 것이 668px 로 굳었다). 이 화면에서 본
+        // 가장 넓은 폭을 물리 px 로 기억해 기준으로 삼는다 — 축소는 밀도만 바꾸므로 이
+        // 값은 배율과 무관하고, 화면이 바뀌면(회전) 처음부터 다시 잰다.
+        val densityNow = LocalDensity.current.density
+        val widestPx = remember(configuration) { FloatArray(1) }
+        val seenPx = maxWidth.value * densityNow
+        if (seenPx.isFinite() && seenPx > widestPx[0]) widestPx[0] = seenPx
+        val availableWidth = if (widestPx[0] > 0f) (widestPx[0] / densityNow).dp else Dp.Infinity
+        val fitScale =
+            if (availableWidth.value.isFinite() && neededWidth > availableWidth && neededWidth > 0.dp)
+                availableWidth / neededWidth
+            else 1f
+        val outerDensity = LocalDensity.current
+        CompositionLocalProvider(
+            LocalDensity provides
+                if (fitScale >= 1f) outerDensity
+                else Density(outerDensity.density * fitScale, outerDensity.fontScale),
         ) {
-            val primaryColor = when {
-                session.paused -> Color(0xFFFBBF24)
-                session.inMap -> Color(0xFF4ADE80)
-                else -> Color(0xFFCBD5E1)
-            }
-            val status = when {
-                // HudView 와 같은 순서 — 끊김이면 나머지 판정은 굳은 값이라 먼저 알려야 한다.
-                session.logStalled -> "끊김"
-                session.gameAway -> "게임 꺼짐"
-                session.paused -> "중지중"
-                !session.baselineReady -> "로그·가방"
-                session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "대기중"
-                else -> "진행중"
-            }
-            val statusColor = when (status) {
-                "진행중" -> Color(0xFF4ADE80)
-                "끊김" -> Color(0xFFEF4444)
-                "게임 꺼짐" -> Color(0xFF94A3B8)
-                "중지중" -> Color(0xFFF87171)
-                "로그·가방" -> Color(0xFFFB923C)
-                else -> Color(0xFF94A3B8) // 대기중
-            }
-            SummaryStatus(
-                status = status,
-                color = statusColor,
-            )
-            Spacer(Modifier.width(statusToMetricGap))
-            selectedMetrics.forEachIndexed { index, metric ->
-                when (metric) {
-                    MiniPanelMetric.MAP_COUNT ->
-                        SummaryMetric("맵핑 횟수", "${session.mapsEntered}회", primaryColor, metricWidth)
-                    MiniPanelMetric.CURRENT_MAP_TIME ->
-                        SummaryMetric("현재 맵", formatElapsedIcon(currentMapElapsed), primaryColor, metricWidth)
-                    // 라벨은 세전/세후 어느 쪽이든 그대로 둔다. 칸이 최소 34dp/7sp 라
-                    // "세후" 를 붙이면 잘리고, 세 지표 중 일부만 붙이면 더 헷갈린다.
-                    // 어느 쪽인지 확인이 필요하면 탭해서 상세 패널을 보면 둘 다 나온다.
-                    MiniPanelMetric.TOTAL_VALUE ->
-                        SummaryMetric("총 수익", formatFire(totalValue), valueColor(totalValue, showNet), metricWidth)
-                    MiniPanelMetric.TOTAL_TIME ->
-                        SummaryMetric("총 시간", if (elapsed > 0) formatElapsedIcon(elapsed) else "대기", primaryColor, metricWidth)
-                    MiniPanelMetric.INCOME_PER_HOUR ->
-                        SummaryMetric("시간당", formatFire(perHour) + "/h", valueColor(perHour, showNet), metricWidth)
-                    MiniPanelMetric.CURRENT_MAP_VALUE ->
-                        SummaryMetric("이번 맵", formatFire(currentMapValue), valueColor(currentMapValue, showNet), metricWidth)
-                }
-                if (index < selectedMetrics.lastIndex) Spacer(Modifier.width(gap))
-            }
-            if (selectedControls.isNotEmpty()) Spacer(Modifier.width(gap))
-            selectedControls.forEachIndexed { index, control ->
-                when (control) {
-                    MiniPanelControl.PAUSE -> SummaryPauseButton(
-                        paused = session.paused,
-                        // 거래소 안에서는 일시정지가 자동 제어다. 상세 HUD 는 아예 버튼을
-                        // 숨기지만(HudView 헤더), 여기서는 폭 예산이 버튼 개수로 미리
-                        // 계산돼 있어 빼면 칸이 어긋난다 — 자리는 두고 흐리게만 만든다.
-                        enabled = !session.inExchange,
-                        onClick = onTogglePause,
+            Box(
+                modifier = Modifier.wrapContentSize()
+                    .background(Color(0xFF0F172A).copy(alpha = 0.9f), RoundedCornerShape(14.dp))
+                    .border(1.dp, Color(0xFFE2E8F0).copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 5.dp, vertical = 3.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val primaryColor = when {
+                        session.paused -> Color(0xFFFBBF24)
+                        session.inMap -> Color(0xFF4ADE80)
+                        else -> Color(0xFFCBD5E1)
+                    }
+                    val status = when {
+                        // HudView 와 같은 순서 — 끊김이면 나머지 판정은 굳은 값이라 먼저 알려야 한다.
+                        session.logStalled -> "끊김"
+                        session.gameAway -> "게임 꺼짐"
+                        session.paused -> "중지중"
+                        !session.baselineReady -> "로그·가방"
+                        session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "대기중"
+                        else -> "진행중"
+                    }
+                    val statusColor = when (status) {
+                        "진행중" -> Color(0xFF4ADE80)
+                        "끊김" -> Color(0xFFEF4444)
+                        "게임 꺼짐" -> Color(0xFF94A3B8)
+                        "중지중" -> Color(0xFFF87171)
+                        "로그·가방" -> Color(0xFFFB923C)
+                        else -> Color(0xFF94A3B8) // 대기중
+                    }
+                    SummaryStatus(
+                        status = status,
+                        color = statusColor,
                     )
-                    MiniPanelControl.RESET -> SummaryResetButton(onReset)
-                    MiniPanelControl.ITEMS -> SummaryItemButton(onToggleItems)
-                    MiniPanelControl.EXIT -> SummaryExitButton(onExitApp)
+                    Spacer(Modifier.width(statusToMetricGap))
+                    selectedMetrics.forEachIndexed { index, metric ->
+                        when (metric) {
+                            MiniPanelMetric.MAP_COUNT ->
+                                SummaryMetric("맵핑 횟수", "${session.mapsEntered}회", primaryColor, metricWidth)
+                            MiniPanelMetric.CURRENT_MAP_TIME ->
+                                SummaryMetric("현재 맵", formatElapsedIcon(currentMapElapsed), primaryColor, metricWidth)
+                            // 라벨은 세전/세후 어느 쪽이든 그대로 둔다. 칸이 최소 34dp/7sp 라
+                            // "세후" 를 붙이면 잘리고, 세 지표 중 일부만 붙이면 더 헷갈린다.
+                            // 어느 쪽인지 확인이 필요하면 탭해서 상세 패널을 보면 둘 다 나온다.
+                            MiniPanelMetric.TOTAL_VALUE ->
+                                SummaryMetric("총 수익", formatFire(totalValue), valueColor(totalValue, showNet), metricWidth)
+                            MiniPanelMetric.TOTAL_TIME ->
+                                SummaryMetric("총 시간", if (elapsed > 0) formatElapsedIcon(elapsed) else "대기", primaryColor, metricWidth)
+                            MiniPanelMetric.INCOME_PER_HOUR ->
+                                SummaryMetric("시간당", formatFire(perHour) + "/h", valueColor(perHour, showNet), metricWidth)
+                            MiniPanelMetric.CURRENT_MAP_VALUE ->
+                                SummaryMetric("이번 맵", formatFire(currentMapValue), valueColor(currentMapValue, showNet), metricWidth)
+                        }
+                        if (index < selectedMetrics.lastIndex) Spacer(Modifier.width(gap))
+                    }
+                    if (selectedControls.isNotEmpty()) Spacer(Modifier.width(gap))
+                    selectedControls.forEachIndexed { index, control ->
+                        when (control) {
+                            MiniPanelControl.PAUSE -> SummaryPauseButton(
+                                paused = session.paused,
+                                // 거래소 안에서는 일시정지가 자동 제어다. 상세 HUD 는 아예 버튼을
+                                // 숨기지만(HudView 헤더), 여기서는 폭 예산이 버튼 개수로 미리
+                                // 계산돼 있어 빼면 칸이 어긋난다 — 자리는 두고 흐리게만 만든다.
+                                enabled = !session.inExchange,
+                                onClick = onTogglePause,
+                            )
+                            MiniPanelControl.RESET -> SummaryResetButton(onReset)
+                            MiniPanelControl.ITEMS -> SummaryItemButton(onToggleItems)
+                            MiniPanelControl.EXIT -> SummaryExitButton(onExitApp)
+                        }
+                        if (index < selectedControls.lastIndex) Spacer(Modifier.width(controlGap))
+                    }
                 }
-                if (index < selectedControls.lastIndex) Spacer(Modifier.width(controlGap))
             }
         }
     }

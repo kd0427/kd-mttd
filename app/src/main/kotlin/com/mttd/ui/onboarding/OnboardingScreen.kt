@@ -52,6 +52,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -94,6 +95,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 /**
  * 상단 탭. "수익"(이번 세션에 번 것)과 "자산"(지금 가방에 있는 것)은 흐름과 잔고의 관계라,
@@ -1205,6 +1207,8 @@ private fun OverlayCard() {
         initialValue = com.mttd.ui.overlay.MiniPanelControl.DEFAULT_IDS,
     )
     val panelEnabled by prefs.gamePanelEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val miniPanelScale by prefs.miniPanelScale.collectAsStateWithLifecycle(initialValue = 1f)
+    val hudScale by prefs.hudScale.collectAsStateWithLifecycle(initialValue = 1f)
     val miniPanelNetValue by prefs.miniPanelNetValue.collectAsStateWithLifecycle(initialValue = false)
 
     // 앱이 다시 포그라운드로 올 때 권한 상태 재확인.
@@ -1300,6 +1304,31 @@ private fun OverlayCard() {
                     BulletLine("미니패널을 탭하면 상세 패널이 열립니다.")
                     BulletLine("길게 누른 채 드래그하면 위치를 옮길 수 있습니다.")
                 }
+
+                HorizontalDivider(color = MttdColors.DividerSoft)
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("패널 크기", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "화면 크기에 맞춰 패널을 줄일 수 있습니다. 글자와 버튼도 같은 비율로 작아집니다.",
+                        fontSize = 12.sp,
+                        lineHeight = 19.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                PanelScaleSlider(
+                    label = "미니패널",
+                    scale = miniPanelScale,
+                    onChange = { scope.launch { prefs.setMiniPanelScale(it) } },
+                )
+                PanelScaleSlider(
+                    label = "상세패널",
+                    scale = hudScale,
+                    onChange = { scope.launch { prefs.setHudScale(it) } },
+                )
+                BulletLine("게임 위 패널이 켜져 있으면 슬라이더를 옮기는 즉시 크기가 바뀝니다. 게임 화면에서 보면서 맞추세요.")
+                BulletLine("템 목록 패널은 미니패널 크기를 따라갑니다.")
+                BulletLine("표시 항목과 버튼을 많이 켜서 한 줄에 안 들어가면, 정한 크기보다 조금 더 줄여 전부 보이게 합니다.")
             }
 
         }
@@ -1479,6 +1508,44 @@ private fun OverlayCard() {
     }
 }
 
+
+/**
+ * 패널 배율 슬라이더. 60%~100% 를 5% 단위 9칸으로 끊는다.
+ *
+ * 드래그를 놓을 때가 아니라 **칸을 넘을 때마다** 저장한다. 오버레이는 이 설정 화면 위에도
+ * 떠 있어서, 저장돼야 슬라이더를 옮기는 동안 실제 패널이 같이 줄어드는 게 보인다 — 그게
+ * 미리보기 역할을 하므로 따로 만들지 않았다. 칸이 아홉이라 끝에서 끝까지 끌어도 쓰기는
+ * 여덟 번이다.
+ */
+@Composable
+private fun PanelScaleSlider(label: String, scale: Float, onChange: (Float) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "${(scale * 100).roundToInt()}%",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Slider(
+            value = scale,
+            onValueChange = { raw ->
+                // 슬라이더는 칸에 맞춰도 0.6500001 같은 값을 준다. 5% 격자에 스냅해서
+                // 저장해야 옆에 띄운 라벨의 숫자와 저장된 값이 같아진다.
+                val snapped = (raw * 20).roundToInt() / 20f
+                if (snapped != scale) onChange(snapped)
+            },
+            valueRange = com.mttd.data.prefs.OverlayPrefs.MIN_PANEL_SCALE..
+                com.mttd.data.prefs.OverlayPrefs.MAX_PANEL_SCALE,
+            steps = 7,
+        )
+    }
+}
 
 @Composable
 private fun TimeTrackingModeSelector(

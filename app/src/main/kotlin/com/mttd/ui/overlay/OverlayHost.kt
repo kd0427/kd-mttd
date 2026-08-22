@@ -8,8 +8,10 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
@@ -78,12 +80,45 @@ class OverlayHost(
     // 높이는 WRAP_CONTENT — 고정 높이면 해상도/글꼴 배율에 따라 아래가 잘리고,
     // 반대로 목록이 비었을 땐 빈 공간이 크게 남는다.
     // 목록이 길어질 때의 상한은 HudOverlay 안에서 heightIn(max) 로 잡고 거기서만 스크롤.
-    private val hudParams = defaultParams(dip(280), WindowManager.LayoutParams.WRAP_CONTENT).apply {
+    private val hudParams = defaultParams(dip(HUD_WIDTH_DP), WindowManager.LayoutParams.WRAP_CONTENT).apply {
         gravity = Gravity.TOP or Gravity.START
         // HUD 는 터치 가능 (버튼용). Icon 이 게임 입력을 뺏지 않도록 flags 조정은 필요 시.
     }
-    private val itemParams = defaultParams(dip(190), WindowManager.LayoutParams.WRAP_CONTENT).apply {
+    private val itemParams = defaultParams(dip(ITEM_PANEL_WIDTH_DP), WindowManager.LayoutParams.WRAP_CONTENT).apply {
         gravity = Gravity.TOP or Gravity.START
+    }
+
+    /**
+     * 지금 적용 중인 패널 배율. 설정값을 **미리 읽어 둔 캐시**다.
+     *
+     * DataStore 의 첫 값은 비동기로 오는데 창은 그보다 먼저 붙는다. 캐시가 없으면 60% 로
+     * 맞춰 둔 사람도 앱을 켤 때마다 100% 짜리 패널이 한 프레임 번쩍이고 줄어든다.
+     * 아래 collector 가 값을 계속 최신으로 유지하는 것도 같은 이유다 — 미니패널은 상세를
+     * 접을 때와 화면을 돌릴 때마다 다시 마운트되므로, 그때마다 옛 배율로 한 번 그려진다.
+     */
+    private var miniScale = 1f
+    private var hudScale = 1f
+
+    init {
+        // 설정에서 슬라이더를 움직이면 떠 있는 창이 그 자리에서 바뀐다. 창을 다시 붙이지
+        // 않는 건 이동 중에 붙였다 떼면 화면이 깜빡이기 때문 — 밀도 쪽은 Compose 가
+        // 같은 Flow 를 구독하고 있어 알아서 다시 그려진다.
+        prefs.miniPanelScale
+            .onEach { s ->
+                if (s == miniScale) return@onEach
+                miniScale = s
+                itemParams.width = scaledDip(ITEM_PANEL_WIDTH_DP, s)
+                itemView?.let { v -> try { wm.updateViewLayout(v, itemParams) } catch (_: Throwable) {} }
+            }
+            .launchIn(ownScope)
+        prefs.hudScale
+            .onEach { s ->
+                if (s == hudScale) return@onEach
+                hudScale = s
+                hudParams.width = scaledDip(HUD_WIDTH_DP, s)
+                hudView?.let { v -> try { wm.updateViewLayout(v, hudParams) } catch (_: Throwable) {} }
+            }
+            .launchIn(ownScope)
     }
 
     // ViewModelStore
@@ -106,6 +141,12 @@ class OverlayHost(
         val savedHudY = runBlocking { prefs.hudY.first() }
         val hudVisible = runBlocking { prefs.hudVisible.first() }
         val alpha = runBlocking { prefs.hudAlpha.first() }
+        // 배율은 창을 붙이기 **전에** 읽어야 한다. 창 폭은 Compose 밀도로 안 줄어드는
+        // 유일한 값이라, 여기서 안 좁히면 60% 짜리 내용이 100% 폭 창 안에서 늘어져 뜬다.
+        miniScale = runBlocking { prefs.miniPanelScale.first() }
+        hudScale = runBlocking { prefs.hudScale.first() }
+        hudParams.width = scaledDip(HUD_WIDTH_DP, hudScale)
+        itemParams.width = scaledDip(ITEM_PANEL_WIDTH_DP, miniScale)
 
         iconParams.x = savedIconX
         iconParams.y = savedIconY
@@ -124,7 +165,7 @@ class OverlayHost(
     /** 접힌 요약 바를 마운트한다. 상세 HUD와 동시에 존재하지 않는다. */
     private fun mountIcon() {
         if (iconView != null) return
-        val icon = buildComposeView {
+        val icon = buildComposeView(prefs.miniPanelScale, miniScale) {
             IconOverlay(
                 sessionState = sessionState,
                 metricFlow = prefs.miniPanelMetrics,
@@ -132,7 +173,13 @@ class OverlayHost(
                 netValueFlow = prefs.miniPanelNetValue,
                 // 마운트 시점에 한 번 재면 회전 후에도 예전 폭이 남는다. 패널이 화면
                 // 설정이 바뀔 때마다 다시 부를 수 있도록 함수째로 넘긴다.
-                maxPanelWidthPx = { (systemDisplayWidthPx() - dip(40)).coerceAtLeast(dip(260)) },
+                //
+                // 배율은 곱하지 않는다 — 이 dp 는 축소된 밀도 아래에서 쓰이므로 물리 폭이
+                // 알아서 배율만큼 줄어든다. 여기서 또 곱하면 두 번 줄어든다.
+                maxPanelWidthDp = {
+                    ((systemDisplayWidthPx() - dip(40)) / context.resources.displayMetrics.density)
+                        .coerceAtLeast(260f)
+                },
                 onTogglePause = {
                     com.mttd.TrackerApplication.instance.trackerService.value?.togglePause()
                 },
@@ -174,7 +221,7 @@ class OverlayHost(
         // 상세를 볼 때는 요약 바를 제거해 둘 중 하나만 보이게 한다.
         iconView?.let { safeRemove(it) }
         iconView = null
-        val hud = buildComposeView {
+        val hud = buildComposeView(prefs.hudScale, hudScale) {
             HudOverlay(
                 sessionState = sessionState,
                 priceState = priceState,
@@ -248,8 +295,13 @@ class OverlayHost(
         if (itemView != null) return
         val savedX = runBlocking { prefs.itemPanelX.first() }
         val savedY = runBlocking { prefs.itemPanelY.first() }
+        // 폭을 먼저 확정한다. 아래 첫 배치가 폭을 빼서 오른쪽 끝을 잡기 때문에, 배율이
+        // 반영되기 전 폭으로 계산하면 화면 밖으로 밀리거나 덜 붙는다.
+        itemParams.width = scaledDip(ITEM_PANEL_WIDTH_DP, miniScale)
         if (savedX == OverlayPrefs.POSITION_UNSET || savedY == OverlayPrefs.POSITION_UNSET) {
-            itemParams.x = (iconParams.x + dip(220)).coerceAtMost(systemDisplayWidthPx() - itemParams.width)
+            // 오프셋은 "미니패널 폭만큼" 이라는 뜻이라 미니패널과 같은 배율로 줄어야 한다.
+            itemParams.x = (iconParams.x + scaledDip(ITEM_PANEL_OFFSET_DP, miniScale))
+                .coerceAtMost(systemDisplayWidthPx() - itemParams.width)
             itemParams.y = iconParams.y
         } else {
             itemParams.x = savedX
@@ -259,7 +311,9 @@ class OverlayHost(
         // 창-이동은 HUD 와 마찬가지로 Compose 쪽 pointerInput 에서 처리한다.
         // View.setOnTouchListener(attachDragBehavior) 로는 목록의 verticalScroll 이 터치를
         // 먼저 가져가는 스크롤 영역에서 창이 안 움직였다 — HudView.kt 의 관련 주석 참조.
-        val item = buildComposeView {
+        // 템 패널은 미니패널 배율을 따른다 — 바로 옆에 붙어 뜨는데 배율이 다르면 한 화면
+        // 안에서 같은 숫자가 다른 크기로 보인다.
+        val item = buildComposeView(prefs.miniPanelScale, miniScale) {
             ItemOverlay(
                 sessionState = sessionState,
                 netValueFlow = prefs.miniPanelNetValue,
@@ -314,14 +368,37 @@ class OverlayHost(
         mountIcon()
     }
 
+    /**
+     * 패널 하나를 담을 ComposeView 를 만든다.
+     *
+     * 배율은 여기 한 곳에서만 적용한다 — Compose 의 밀도를 바꿔 놓으면 패널 안의 dp 와 sp 가
+     * 함께 줄어들어, 패널 코드는 한 줄도 모른 채 축소판이 된다. 반대로 각 컴포저블에
+     * scale 파라미터를 넘기기 시작하면 치수마다 곱셈을 빠뜨릴 자리가 생긴다.
+     *
+     * @param scaleFlow 이 창이 따를 배율. 미니패널과 템 패널은 같은 값을 쓴다.
+     * @param initialScale 첫 프레임에 쓸 배율. Flow 의 첫 값이 오기 전을 메운다.
+     */
     private fun buildComposeView(
+        scaleFlow: kotlinx.coroutines.flow.Flow<Float>,
+        initialScale: Float,
         content: @androidx.compose.runtime.Composable () -> Unit,
     ): ComposeView {
         val v = ComposeView(context)
         v.setViewTreeLifecycleOwner(lifecycleOwner)
         v.setViewTreeViewModelStoreOwner(this)
         v.setViewTreeSavedStateRegistryOwner(savedStateOwner)
-        v.setContent { content() }
+        v.setContent {
+            val scale by scaleFlow.collectAsStateWithLifecycle(initialValue = initialScale)
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                // 배율이 100% 면 시스템이 준 밀도를 그대로 넘긴다. Density(...) 로 다시 만들면
+                // 글꼴 크기를 크게 쓰는 기기에서 sp 변환 방식이 바뀌어, 배율을 건드린 적 없는
+                // 사람의 글자 크기까지 미세하게 달라진다.
+                androidx.compose.ui.platform.LocalDensity provides
+                    if (scale == 1f) base
+                    else androidx.compose.ui.unit.Density(base.density * scale, base.fontScale),
+            ) { content() }
+        }
         return v
     }
 
@@ -434,6 +511,16 @@ class OverlayHost(
     private fun dip(v: Int): Int =
         (v * context.resources.displayMetrics.density).toInt()
 
+    /**
+     * 패널 배율까지 곱한 dp→px. **창 크기와 창 사이 배치에만** 쓴다.
+     *
+     * 패널 안쪽 치수는 [buildComposeView] 의 밀도가 이미 처리하므로 여기 올 일이 없다.
+     * 반대로 화면 자체를 재는 값([clampToScreen] 의 여백, 미니패널 최대 폭)은 배율과 무관한
+     * 물리 크기라 [dip] 을 그대로 써야 한다 — 배율을 곱하면 화면이 줄어든 셈이 된다.
+     */
+    private fun scaledDip(v: Int, scale: Float): Int =
+        (v * context.resources.displayMetrics.density * scale).toInt()
+
     /** 앱 호환 폭과 무관한 Android 시스템의 실제 디스플레이 가로 px. */
     private fun systemDisplayWidthPx(): Int =
         android.content.res.Resources.getSystem().displayMetrics.widthPixels
@@ -466,5 +553,10 @@ class OverlayHost(
         private const val LONG_PRESS_MS = 400L
         /** 창이 화면 안에 반드시 남겨야 하는 최소 크기(dp). 잡아서 끌 수 있을 정도. */
         private const val VISIBLE_MARGIN_DP = 56
+        /** 상세 패널 창 폭. 헤더 버튼 줄이 이 폭에 맞춰 예산이 짜여 있다 (HudView 참조). */
+        private const val HUD_WIDTH_DP = 280
+        private const val ITEM_PANEL_WIDTH_DP = 190
+        /** 템 패널을 처음 열 때 미니패널 왼쪽 끝에서 띄우는 거리 — 미니패널 폭만큼. */
+        private const val ITEM_PANEL_OFFSET_DP = 220
     }
 }

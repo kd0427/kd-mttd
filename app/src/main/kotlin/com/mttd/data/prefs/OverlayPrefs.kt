@@ -92,6 +92,33 @@ class OverlayPrefs(private val context: Context) {
     val itemPanelY: Flow<Int> = context.dataStore.data.map { it[KEY_ITEM_PANEL_Y] ?: POSITION_UNSET }
     val hudAlpha: Flow<Float> = context.dataStore.data.map { it[KEY_HUD_ALPHA] ?: 0.85f }
     val hudVisible: Flow<Boolean> = context.dataStore.data.map { it[KEY_HUD_VISIBLE] ?: false }
+
+    /**
+     * 미니패널(과 거기서 여는 템 목록 패널)의 표시 배율.
+     *
+     * 화면 크기가 제각각인 기기에서 각자 맞게 줄여 쓰라는 설정이다. 값은 Compose 밀도에
+     * 곱해져 dp·sp 를 한꺼번에 줄이므로, 글자·아이콘·여백·버튼이 **같은 비율로** 작아진다 —
+     * 패널을 통째로 축소한 그림이 되지, 글자만 작아져 헐렁해지지 않는다.
+     *
+     * 템 패널이 미니패널 배율을 따르는 건 둘이 나란히 붙어 뜨기 때문이다. 배율이 다르면
+     * 같은 화면 안에서 글자 크기가 제각각으로 보인다.
+     */
+    val miniPanelScale: Flow<Float> = context.dataStore.data.map {
+        (it[KEY_MINI_PANEL_SCALE] ?: 1f).coerceIn(MIN_PANEL_SCALE, MAX_PANEL_SCALE)
+    }
+
+    /** 상세 패널의 표시 배율. 미니패널과 따로 조절한다. 자세한 건 [miniPanelScale]. */
+    val hudScale: Flow<Float> = context.dataStore.data.map {
+        (it[KEY_HUD_SCALE] ?: 1f).coerceIn(MIN_PANEL_SCALE, MAX_PANEL_SCALE)
+    }
+
+    suspend fun setMiniPanelScale(v: Float) {
+        context.dataStore.edit { it[KEY_MINI_PANEL_SCALE] = v.coerceIn(MIN_PANEL_SCALE, MAX_PANEL_SCALE) }
+    }
+
+    suspend fun setHudScale(v: Float) {
+        context.dataStore.edit { it[KEY_HUD_SCALE] = v.coerceIn(MIN_PANEL_SCALE, MAX_PANEL_SCALE) }
+    }
     /** 게임 위 패널 표시 여부. 기본값은 표시 상태. */
     val gamePanelEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_GAME_PANEL_ENABLED] ?: true }
     val miniPanelCardAlignmentApplied: Flow<Boolean> = context.dataStore.data.map {
@@ -161,6 +188,15 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_MINI_PANEL_CONTROLS = stringSetPreferencesKey("mini_panel_controls")
         private val KEY_MINI_PANEL_NET_VALUE = booleanPreferencesKey("mini_panel_net_value")
         private val KEY_TIME_TRACKING_MODE = androidx.datastore.preferences.core.stringPreferencesKey("time_tracking_mode")
+        private val KEY_MINI_PANEL_SCALE = floatPreferencesKey("mini_panel_scale")
+        private val KEY_HUD_SCALE = floatPreferencesKey("hud_scale")
         const val POSITION_UNSET = Int.MIN_VALUE
+
+        /**
+         * 패널 배율의 하한. 더 내려가면 24dp 버튼이 손가락으로 누르기 힘든 크기가 된다 —
+         * 미니패널 탭은 상세 패널을 여는 유일한 입구라 여기서 못 누르면 막힌다.
+         */
+        const val MIN_PANEL_SCALE = 0.6f
+        const val MAX_PANEL_SCALE = 1f
     }
 }

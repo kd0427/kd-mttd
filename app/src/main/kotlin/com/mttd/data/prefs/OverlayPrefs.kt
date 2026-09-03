@@ -84,6 +84,21 @@ class OverlayPrefs(private val context: Context) {
         context.dataStore.edit { it[KEY_TIME_TRACKING_MODE] = mode.id }
     }
 
+    /**
+     * "대기중"(맵 밖) 에는 수익도 안 셀지. 기본 켜짐.
+     *
+     * 맵 밖에서 들어오는 가방 변화는 파밍이 아니라 우편·상점·제작·분해다. 시간은 이미
+     * 멈추는데 수익만 계속 쌓이면 시간당 수익이 그만큼 부풀어 오른다.
+     * [timeTrackingMode] 가 항상 측정이면 대기중이라는 상태가 없으므로 이 설정도 무효다.
+     */
+    val standbyStopsValue: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_STANDBY_STOPS_VALUE] ?: true
+    }
+
+    suspend fun setStandbyStopsValue(v: Boolean) {
+        context.dataStore.edit { it[KEY_STANDBY_STOPS_VALUE] = v }
+    }
+
     val iconX: Flow<Int> = context.dataStore.data.map { it[KEY_ICON_X] ?: 60 }
     val iconY: Flow<Int> = context.dataStore.data.map { it[KEY_ICON_Y] ?: 300 }
     val hudX: Flow<Int> = context.dataStore.data.map { it[KEY_HUD_X] ?: 60 }
@@ -188,6 +203,7 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_MINI_PANEL_CONTROLS = stringSetPreferencesKey("mini_panel_controls")
         private val KEY_MINI_PANEL_NET_VALUE = booleanPreferencesKey("mini_panel_net_value")
         private val KEY_TIME_TRACKING_MODE = androidx.datastore.preferences.core.stringPreferencesKey("time_tracking_mode")
+        private val KEY_STANDBY_STOPS_VALUE = booleanPreferencesKey("standby_stops_value")
         private val KEY_MINI_PANEL_SCALE = floatPreferencesKey("mini_panel_scale")
         private val KEY_HUD_SCALE = floatPreferencesKey("hud_scale")
         const val POSITION_UNSET = Int.MIN_VALUE

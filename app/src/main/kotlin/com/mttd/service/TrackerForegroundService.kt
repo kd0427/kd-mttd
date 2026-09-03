@@ -208,6 +208,9 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         lifecycleScope.launch {
             overlayPrefs.timeTrackingMode.collect { aggregator.setTimeTrackingMode(it) }
         }
+        lifecycleScope.launch {
+            overlayPrefs.standbyStopsValue.collect { aggregator.setStandbyStopsValue(it) }
+        }
         ensureNotificationChannel()
         TrackerApplication.instance.setTrackerService(this)
         startPriceRefreshLoop()

@@ -157,6 +157,28 @@ class SessionAggregator(
     }
 
     /**
+     * "대기중" 에는 수익도 안 세는지 (설정, 기본 켜짐).
+     *
+     * [SessionState] 에 안 넣은 건 [resetSession] 이 상태를 골라 옮기기 때문이다 — 거기에
+     * 넣으면 옮기는 목록에서 빠뜨리는 순간 리셋할 때마다 설정이 기본값으로 돌아간다.
+     */
+    private var standbyStopsValue = true
+
+    fun setStandbyStopsValue(enabled: Boolean) {
+        standbyStopsValue = enabled
+    }
+
+    /**
+     * 지금이 "수익도 멈추는 대기중" 인지. HUD 의 "대기중" 표시와 같은 조건이다
+     * (`MAP_ONLY` + 맵 밖) — 항상 측정 모드에는 대기중이라는 상태가 없으므로 이 설정도 안 건다.
+     */
+    private fun standbyStopsValueNow(): Boolean {
+        if (!standbyStopsValue) return false
+        val s = _state.value
+        return s.timeTrackingMode == TimeTrackingMode.MAP_ONLY && !s.inMap
+    }
+
+    /**
      * 로그를 읽지 못하는 상태인지 서비스가 알려준다 (표시 전용 — 집계는 건드리지 않는다).
      * 판정은 폴러 상태를 보는 [com.mttd.service.TrackerForegroundService] 쪽에 있다.
      */
@@ -319,6 +341,27 @@ class SessionAggregator(
     private val consumeEndRegex = Regex("""ItemChange@\s+ProtoName=(Spv3Open|Spv3Enter|InputArea|XchgSyncSoldSale)\s+end""")
 
     /**
+     * 소비 블록 중 **맵에 들어가는 비용**인 것들. 대기중 수익 정지([standbyStopsValue])의 예외다.
+     *
+     * `Spv3Enter` 는 실기기 로그로 정체를 확정하지 못했지만 `Spv3` = 특수 맵 이벤트라 여기 넣는다.
+     * 빼서 틀리면 실제 비용이 집계에서 조용히 사라져 수익이 부풀고, 넣어서 틀리면 지금까지와
+     * 똑같이 세는 것뿐이다 — 한쪽만 조용히 틀린다.
+     *
+     * `InputArea`(지역 선택 복귀) 와 `XchgSyncSoldSale`(경매장 판매 정산) 은 맵 진입 비용이
+     * 아니므로 제외한다.
+     */
+    private val mapEntryConsumeProtos = setOf("Spv3Open", "Spv3Enter")
+
+    /**
+     * 지금 열려 있는 소비 블록이 [mapEntryConsumeProtos] 인지.
+     *
+     * `end` 라인이 반드시 온다고 믿지 않는다 — 안 오면 이 플래그가 굳어서 대기중 정지가
+     * 통째로 무력화되므로, 맵 진입 비용이 절대 오지 않는 지점(획득 블록 시작 · 맵 진입 완료)
+     * 에서도 같이 내린다.
+     */
+    private var inMapEntryConsume = false
+
+    /**
      * 맵 열기 = 이번 런의 시작. 여기서 나침반/비콘/탐침을 소비하므로
      * "이번 진입" 목록은 이 시점에 비워야 소비(마이너스) 항목이 목록에 남는다.
      *
@@ -466,11 +509,22 @@ class SessionAggregator(
         if (consumeXchgLine(line)) return
 
         // 블록 컨텍스트 추적 (Modfy 첫 sighting 시 방향 힌트)
+        val consumeStart = consumeStartRegex.find(line)
         when {
-            pickItemsStartRegex.containsMatchIn(line) -> blockContext = BlockContext.PICKUP
-            consumeStartRegex.containsMatchIn(line) -> blockContext = BlockContext.CONSUME
+            pickItemsStartRegex.containsMatchIn(line) -> {
+                blockContext = BlockContext.PICKUP
+                // 맵 진입 비용은 획득 블록으로 오지 않는다 — 여기서 내려도 비용을 놓칠 일이 없다.
+                inMapEntryConsume = false
+            }
+            consumeStart != null -> {
+                blockContext = BlockContext.CONSUME
+                inMapEntryConsume = consumeStart.groupValues[1] in mapEntryConsumeProtos
+            }
             pickItemsEndRegex.containsMatchIn(line) -> blockContext = BlockContext.NONE
-            consumeEndRegex.containsMatchIn(line) -> blockContext = BlockContext.NONE
+            consumeEndRegex.containsMatchIn(line) -> {
+                blockContext = BlockContext.NONE
+                inMapEntryConsume = false
+            }
         }
 
         // 거래소 진입/퇴장 — 파밍 집계와 무관한 UI 전환이므로 다른 파싱과 독립적으로 처리.
@@ -854,6 +908,9 @@ class SessionAggregator(
                 currentMapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
             )
         }
+        // 맵에 들어왔다 = 맵 열기 비용은 이미 다 지나갔다. 예외 플래그를 여기서도 내려
+        // `end` 라인이 안 오는 경우에 굳는 걸 막는다.
+        if (inMap) inMapEntryConsume = false
         if (_state.value.inMap != before) recordPresence(inMap, reason)
     }
 
@@ -1008,6 +1065,17 @@ class SessionAggregator(
             // 거래소 안이면(구매/판매 등록/취소로 슬롯이 바뀔 때마다) 수동 새로고침 없이도
             // 보유 아이템 가치가 바로 최신으로 보이게 즉시 재계산한다.
             if (_state.value.inExchange) refreshHoldings()
+            return
+        }
+
+        // 대기중(맵 밖)에는 파밍이 아닌 가방 변화만 들어온다 — 우편·상점·제작·분해. 시간이
+        // 멈춘 구간의 수익을 세면 시간당 수익이 그만큼 부풀어 오르므로 수익도 같이 세운다.
+        //
+        // 맵 진입 비용은 예외다. 게임은 `inMap = false` 를 세운 뒤에 그 소비 라인을 보내므로
+        // ([startNewRun]), 대기중을 통째로 막으면 지도·나침반·탐침 값이 집계에서 조용히
+        // 사라져 수익이 실제보다 높게 나온다.
+        if (standbyStopsValueNow() && !inMapEntryConsume) {
+            slotLastCount[slotUuid] = totalCountInSlot
             return
         }
 

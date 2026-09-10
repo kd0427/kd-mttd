@@ -85,11 +85,11 @@ class OverlayPrefs(private val context: Context) {
     }
 
     /**
-     * 마을에 있는 동안 수익을 안 셀지. 기본 켜짐.
+     * "대기중"(맵 밖) 에는 수익도 안 셀지. 기본 켜짐.
      *
      * 맵 밖에서 들어오는 가방 변화는 파밍이 아니라 우편·상점·제작·분해다. 시간은 이미
      * 멈추는데 수익만 계속 쌓이면 시간당 수익이 그만큼 부풀어 오른다.
-     * 시간 측정 방식과는 별개이며, 실제 마을 MapName 을 관측한 동안에만 적용된다.
+     * [timeTrackingMode] 가 항상 측정이면 대기중이라는 상태가 없으므로 이 설정도 무효다.
      */
     val standbyStopsValue: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_STANDBY_STOPS_VALUE] ?: true

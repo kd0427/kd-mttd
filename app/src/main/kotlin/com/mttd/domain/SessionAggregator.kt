@@ -157,7 +157,7 @@ class SessionAggregator(
     }
 
     /**
-     * "대기중" 에는 수익도 안 세는지 (설정, 기본 켜짐).
+     * 마을에 있는 동안 수익을 안 세는지 (설정, 기본 켜짐).
      *
      * [SessionState] 에 안 넣은 건 [resetSession] 이 상태를 골라 옮기기 때문이다 — 거기에
      * 넣으면 옮기는 목록에서 빠뜨리는 순간 리셋할 때마다 설정이 기본값으로 돌아간다.
@@ -168,14 +168,12 @@ class SessionAggregator(
         standbyStopsValue = enabled
     }
 
-    /**
-     * 지금이 "수익도 멈추는 대기중" 인지. HUD 의 "대기중" 표시와 같은 조건이다
-     * (`MAP_ONLY` + 맵 밖) — 항상 측정 모드에는 대기중이라는 상태가 없으므로 이 설정도 안 건다.
-     */
+    /** 실제 마을 MapName 을 관측한 뒤인지. `inMap=false`와는 구분한다. */
+    private var inTown = false
+
+    /** 지금이 수익을 멈춰야 하는 마을인지. 시간 측정 방식과는 독립적이다. */
     private fun standbyStopsValueNow(): Boolean {
-        if (!standbyStopsValue) return false
-        val s = _state.value
-        return s.timeTrackingMode == TimeTrackingMode.MAP_ONLY && !s.inMap
+        return standbyStopsValue && inTown
     }
 
     /**
@@ -341,7 +339,7 @@ class SessionAggregator(
     private val consumeEndRegex = Regex("""ItemChange@\s+ProtoName=(Spv3Open|Spv3Enter|InputArea|XchgSyncSoldSale)\s+end""")
 
     /**
-     * 소비 블록 중 **맵에 들어가는 비용**인 것들. 대기중 수익 정지([standbyStopsValue])의 예외다.
+     * 소비 블록 중 **맵에 들어가는 비용**인 것들. 마을 수익 정지([standbyStopsValue])의 예외다.
      *
      * `Spv3Enter` 는 실기기 로그로 정체를 확정하지 못했지만 `Spv3` = 특수 맵 이벤트라 여기 넣는다.
      * 빼서 틀리면 실제 비용이 집계에서 조용히 사라져 수익이 부풀고, 넣어서 틀리면 지금까지와
@@ -531,8 +529,12 @@ class SessionAggregator(
         if (exchangeEnterRegex.containsMatchIn(line)) { enterExchange(); return }
         if (exchangeExitRegex.containsMatchIn(line)) { exitExchange(); return }
 
-        // 맵 열기 = 새 런 시작. 이 직후의 소비(마이너스) 항목부터 "이번 진입" 에 쌓인다.
-        if (mapOpenStartRegex.containsMatchIn(line)) startNewRun()
+        // 맵 열기 = 더는 마을이 아니다. 뒤따르는 소비(마이너스) 항목부터 "이번 진입" 에
+        // 쌓인다. MapName보다 소비 로그가 먼저 오므로 여기서 마을 상태를 즉시 해제한다.
+        if (mapOpenStartRegex.containsMatchIn(line)) {
+            inTown = false
+            startNewRun()
+        }
         // 지역 선택으로 복귀하면 시간은 즉시 멈춘다. 여기서 `awaitingMapArea`도 반드시
         // 비워야 한다. 이를 남겨 두면, 귀환 직후에 도착하는 마을 EnterArea를 직전
         // Spv3Open의 맵 진입으로 오인해 타이머가 다시 시작될 수 있다.
@@ -645,7 +647,12 @@ class SessionAggregator(
         val m = mapNameRegex.find(line)
         if (m != null) {
             val code = m.groupValues[1]
-            if (code.startsWith("LoginScene") || mapNames?.isTown(code) == true) {
+            val isLoginScene = code.startsWith("LoginScene")
+            val isTown = mapNames?.isTown(code) == true
+            // 수익 차단은 `inMap`이 아니라 실제 마을 이름을 본 경우에만 건다.
+            // InputArea는 특별 보스/시즌 지역 전환에도 나타날 수 있어 마을의 증거가 아니다.
+            inTown = isTown
+            if (isLoginScene || isTown) {
                 latestMapCode = null
                 awaitingMapArea = false
                 // 로그인 화면에 있다 = 거래소 안일 수 없다. 거래소를 닫는 신호(Destory)는
@@ -653,7 +660,7 @@ class SessionAggregator(
                 // 굳어 재로그인 후 파밍 집계가 통째로 막힌다.
                 // (마을은 여기서 안 푼다 — 경매장은 마을 위에 뜨는 화면이라 거래 중에도
                 //  마을 MapName 이 올 수 있고, 그때 풀면 거래가 수익으로 잡힌다.)
-                if (code.startsWith("LoginScene")) exitExchange()
+                if (isLoginScene) exitExchange()
                 setMapPresence(false, "MapName=$code")
             } else if (code != latestMapCode && code.isNotEmpty()) {
                 latestMapCode = code
@@ -1068,11 +1075,12 @@ class SessionAggregator(
             return
         }
 
-        // 대기중(맵 밖)에는 파밍이 아닌 가방 변화만 들어온다 — 우편·상점·제작·분해. 시간이
-        // 멈춘 구간의 수익을 세면 시간당 수익이 그만큼 부풀어 오르므로 수익도 같이 세운다.
+        // 실제 마을에서는 파밍이 아닌 가방 변화가 들어온다 — 우편·상점·제작·분해. InputArea
+        // 같은 맵 밖 전환만으로는 막지 않는다. 특별 보스/시즌 지역 이동에도 같은 신호가 오기
+        // 때문에, 명시적인 마을 MapName 을 관측한 경우에만 수익을 멈춘다.
         //
         // 맵 진입 비용은 예외다. 게임은 `inMap = false` 를 세운 뒤에 그 소비 라인을 보내므로
-        // ([startNewRun]), 대기중을 통째로 막으면 지도·나침반·탐침 값이 집계에서 조용히
+        // ([startNewRun]), 마을 상태를 통째로 막으면 지도·나침반·탐침 값이 집계에서 조용히
         // 사라져 수익이 실제보다 높게 나온다.
         if (standbyStopsValueNow() && !inMapEntryConsume) {
             slotLastCount[slotUuid] = totalCountInSlot

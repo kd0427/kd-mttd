@@ -209,7 +209,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
             overlayPrefs.timeTrackingMode.collect { aggregator.setTimeTrackingMode(it) }
         }
         lifecycleScope.launch {
-            overlayPrefs.standbyStopsValue.collect { aggregator.setStandbyStopsValue(it) }
+            overlayPrefs.townStopsValue.collect { aggregator.setTownStopsValue(it) }
         }
         ensureNotificationChannel()
         TrackerApplication.instance.setTrackerService(this)

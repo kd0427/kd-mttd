@@ -85,18 +85,18 @@ class OverlayPrefs(private val context: Context) {
     }
 
     /**
-     * "대기중"(맵 밖) 에는 수익도 안 셀지. 기본 켜짐.
+     * 마을에서는 수익도 안 셀지. 기본 켜짐.
      *
-     * 맵 밖에서 들어오는 가방 변화는 파밍이 아니라 우편·상점·제작·분해다. 시간은 이미
+     * 마을에서 들어오는 가방 변화는 파밍이 아니라 우편·상점·제작·분해다. 시간은 이미
      * 멈추는데 수익만 계속 쌓이면 시간당 수익이 그만큼 부풀어 오른다.
-     * [timeTrackingMode] 가 항상 측정이면 대기중이라는 상태가 없으므로 이 설정도 무효다.
+     * [timeTrackingMode] 가 항상 측정이면 마을 시간도 세므로 이 설정은 무효다.
      */
-    val standbyStopsValue: Flow<Boolean> = context.dataStore.data.map {
-        it[KEY_STANDBY_STOPS_VALUE] ?: true
+    val townStopsValue: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_TOWN_STOPS_VALUE] ?: true
     }
 
-    suspend fun setStandbyStopsValue(v: Boolean) {
-        context.dataStore.edit { it[KEY_STANDBY_STOPS_VALUE] = v }
+    suspend fun setTownStopsValue(v: Boolean) {
+        context.dataStore.edit { it[KEY_TOWN_STOPS_VALUE] = v }
     }
 
     val iconX: Flow<Int> = context.dataStore.data.map { it[KEY_ICON_X] ?: 60 }
@@ -203,7 +203,9 @@ class OverlayPrefs(private val context: Context) {
         private val KEY_MINI_PANEL_CONTROLS = stringSetPreferencesKey("mini_panel_controls")
         private val KEY_MINI_PANEL_NET_VALUE = booleanPreferencesKey("mini_panel_net_value")
         private val KEY_TIME_TRACKING_MODE = androidx.datastore.preferences.core.stringPreferencesKey("time_tracking_mode")
-        private val KEY_STANDBY_STOPS_VALUE = booleanPreferencesKey("standby_stops_value")
+        // 0.6.9 에서 "대기중" 이라는 이름으로 나갔다. 뜻이 마을로 좁혀졌어도 저장 키는 그대로 둔다 —
+        // 바꾸면 이미 끄고 쓰던 사람의 선택이 조용히 기본값으로 돌아간다.
+        private val KEY_TOWN_STOPS_VALUE = booleanPreferencesKey("standby_stops_value")
         private val KEY_MINI_PANEL_SCALE = floatPreferencesKey("mini_panel_scale")
         private val KEY_HUD_SCALE = floatPreferencesKey("hud_scale")
         const val POSITION_UNSET = Int.MIN_VALUE

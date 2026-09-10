@@ -1199,7 +1199,7 @@ private fun OverlayCard() {
     val timeTrackingMode by prefs.timeTrackingMode.collectAsStateWithLifecycle(
         initialValue = com.mttd.domain.models.TimeTrackingMode.MAP_ONLY,
     )
-    val standbyStopsValue by prefs.standbyStopsValue.collectAsStateWithLifecycle(initialValue = true)
+    val townStopsValue by prefs.townStopsValue.collectAsStateWithLifecycle(initialValue = true)
     val miniPanelMetrics by prefs.miniPanelMetrics.collectAsStateWithLifecycle(
         initialValue = com.mttd.ui.overlay.MiniPanelMetric.DEFAULT_IDS,
     )
@@ -1509,9 +1509,9 @@ private fun OverlayCard() {
             // 설정이 아무 일도 안 하므로 아예 안 보여준다.
             if (timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY) {
                 HorizontalDivider(color = MttdColors.DividerSoft)
-                StandbyStopsValueToggle(
-                    checked = standbyStopsValue,
-                    onCheckedChange = { v -> scope.launch { prefs.setStandbyStopsValue(v) } },
+                TownStopsValueToggle(
+                    checked = townStopsValue,
+                    onCheckedChange = { v -> scope.launch { prefs.setTownStopsValue(v) } },
                 )
             }
         }
@@ -1519,14 +1519,14 @@ private fun OverlayCard() {
 }
 
 /**
- * "대기중에는 수익도 멈춤" 토글.
+ * "마을에서는 수익도 멈춤" 토글.
  *
- * 맵 밖에서 들어오는 가방 변화는 파밍이 아니라 우편·상점·제작·분해다. 시간은 이미 멈추는데
+ * 마을에서 들어오는 가방 변화는 파밍이 아니라 우편·상점·제작·분해다. 시간은 이미 멈추는데
  * 수익만 계속 쌓이면 시간당 수익이 그만큼 부풀어 오른다. 맵에 들어가는 비용(지도·나침반)은
  * 켜 두어도 그대로 집계되므로, 회차 수익은 비용을 뺀 값이 유지된다.
  */
 @Composable
-private fun StandbyStopsValueToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun TownStopsValueToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -1536,10 +1536,11 @@ private fun StandbyStopsValueToggle(checked: Boolean, onCheckedChange: (Boolean)
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            Text("대기중에는 수익도 멈춤", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Text("마을에서는 수익도 멈춤", fontSize = 14.sp, fontWeight = FontWeight.Medium)
             Text(
                 if (checked) {
-                    "마을에서 받은 우편·상점·제작은 수익에 안 들어갑니다. 맵에 들어가는 비용은 그대로 셉니다."
+                    "마을에서 받은 우편·상점·제작은 수익에 안 들어갑니다. 맵에 들어가는 비용과 " +
+                        "시즌맵·특수지역처럼 마을이 아닌 곳은 그대로 셉니다."
                 } else {
                     "마을에서 생긴 가방 변화도 모두 수익으로 셉니다."
                 },

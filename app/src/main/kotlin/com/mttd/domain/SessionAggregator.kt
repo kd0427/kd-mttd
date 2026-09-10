@@ -157,25 +157,42 @@ class SessionAggregator(
     }
 
     /**
-     * "대기중" 에는 수익도 안 세는지 (설정, 기본 켜짐).
+     * 마을에서는 수익도 안 세는지 (설정, 기본 켜짐).
      *
      * [SessionState] 에 안 넣은 건 [resetSession] 이 상태를 골라 옮기기 때문이다 — 거기에
      * 넣으면 옮기는 목록에서 빠뜨리는 순간 리셋할 때마다 설정이 기본값으로 돌아간다.
      */
-    private var standbyStopsValue = true
+    private var townStopsValue = true
 
-    fun setStandbyStopsValue(enabled: Boolean) {
-        standbyStopsValue = enabled
+    fun setTownStopsValue(enabled: Boolean) {
+        townStopsValue = enabled
     }
 
     /**
-     * 지금이 "수익도 멈추는 대기중" 인지. HUD 의 "대기중" 표시와 같은 조건이다
-     * (`MAP_ONLY` + 맵 밖) — 항상 측정 모드에는 대기중이라는 상태가 없으므로 이 설정도 안 건다.
+     * **마을에 있는 게 확인됐는지.** 모르는 상태(앱을 켠 직후)는 false 로 둔다 — 막지 않는 쪽이
+     * 안전하다.
+     *
+     * 처음에는 이 판정을 `inMap == false` 로 했는데, 그건 "맵이라고 **확인 못 한** 곳" 을 전부
+     * 막는 구조라 앱이 못 알아보는 지역(시즌맵·특수지역)에서도 수익이 멈췄다. 맵 인식은
+     * 맵 열기·맵 이름·지역 진입 신호가 다 맞아떨어져야 서는 반면, 마을 판정은 `map.json` 의
+     * `[마을]` 표기 하나로 끝나므로 "마을이다" 를 직접 보는 쪽이 훨씬 좁고 확실하다.
+     *
+     * 그래서 새 지역이 생겨도 최악이 "마을 수익이 잠깐 잡힌다"(예전 동작) 이지,
+     * "파밍 수익이 통째로 안 잡힌다" 가 아니다.
      */
-    private fun standbyStopsValueNow(): Boolean {
-        if (!standbyStopsValue) return false
+    private var inTown = false
+
+    /**
+     * 지금이 "수익도 멈추는 마을" 인지.
+     *
+     * `MAP_ONLY` 를 같이 보는 건 이 설정이 시간 측정 방식에 딸린 것이기 때문이다 — 항상 측정은
+     * 마을 시간도 세므로 마을 수익만 빼면 시간당 수익이 오히려 낮아진다.
+     * `!inMap` 은 안전장치다. 둘이 동시에 참인 모순 상태에서는 안 막는 쪽으로 기운다.
+     */
+    private fun townStopsValueNow(): Boolean {
+        if (!townStopsValue) return false
         val s = _state.value
-        return s.timeTrackingMode == TimeTrackingMode.MAP_ONLY && !s.inMap
+        return s.timeTrackingMode == TimeTrackingMode.MAP_ONLY && !s.inMap && inTown
     }
 
     /**
@@ -341,7 +358,7 @@ class SessionAggregator(
     private val consumeEndRegex = Regex("""ItemChange@\s+ProtoName=(Spv3Open|Spv3Enter|InputArea|XchgSyncSoldSale)\s+end""")
 
     /**
-     * 소비 블록 중 **맵에 들어가는 비용**인 것들. 대기중 수익 정지([standbyStopsValue])의 예외다.
+     * 소비 블록 중 **맵에 들어가는 비용**인 것들. 마을 수익 정지([townStopsValue])의 예외다.
      *
      * `Spv3Enter` 는 실기기 로그로 정체를 확정하지 못했지만 `Spv3` = 특수 맵 이벤트라 여기 넣는다.
      * 빼서 틀리면 실제 비용이 집계에서 조용히 사라져 수익이 부풀고, 넣어서 틀리면 지금까지와
@@ -645,7 +662,13 @@ class SessionAggregator(
         val m = mapNameRegex.find(line)
         if (m != null) {
             val code = m.groupValues[1]
-            if (code.startsWith("LoginScene") || mapNames?.isTown(code) == true) {
+            val isLogin = code.startsWith("LoginScene")
+            val isTownCode = !isLogin && mapNames?.isTown(code) == true
+            // 마을 판정은 여기 한 곳에서만 선다 ([inTown] 참조). 로그인 화면은 마을이 아니다 —
+            // 캐릭터를 고르는 중이라 파밍도 우편 수령도 없고, 마을로 들어가면 그때 마을
+            // MapName 이 따로 온다.
+            inTown = isTownCode
+            if (isLogin || isTownCode) {
                 latestMapCode = null
                 awaitingMapArea = false
                 // 로그인 화면에 있다 = 거래소 안일 수 없다. 거래소를 닫는 신호(Destory)는
@@ -653,7 +676,7 @@ class SessionAggregator(
                 // 굳어 재로그인 후 파밍 집계가 통째로 막힌다.
                 // (마을은 여기서 안 푼다 — 경매장은 마을 위에 뜨는 화면이라 거래 중에도
                 //  마을 MapName 이 올 수 있고, 그때 풀면 거래가 수익으로 잡힌다.)
-                if (code.startsWith("LoginScene")) exitExchange()
+                if (isLogin) exitExchange()
                 setMapPresence(false, "MapName=$code")
             } else if (code != latestMapCode && code.isNotEmpty()) {
                 latestMapCode = code
@@ -908,9 +931,6 @@ class SessionAggregator(
                 currentMapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
             )
         }
-        // 맵에 들어왔다 = 맵 열기 비용은 이미 다 지나갔다. 예외 플래그를 여기서도 내려
-        // `end` 라인이 안 오는 경우에 굳는 걸 막는다.
-        if (inMap) inMapEntryConsume = false
         if (_state.value.inMap != before) recordPresence(inMap, reason)
     }
 
@@ -1068,13 +1088,13 @@ class SessionAggregator(
             return
         }
 
-        // 대기중(맵 밖)에는 파밍이 아닌 가방 변화만 들어온다 — 우편·상점·제작·분해. 시간이
-        // 멈춘 구간의 수익을 세면 시간당 수익이 그만큼 부풀어 오르므로 수익도 같이 세운다.
+        // 마을에는 파밍이 아닌 가방 변화만 들어온다 — 우편·상점·제작·분해. 시간이 멈춘
+        // 구간의 수익을 세면 시간당 수익이 그만큼 부풀어 오르므로 수익도 같이 세운다.
         //
-        // 맵 진입 비용은 예외다. 게임은 `inMap = false` 를 세운 뒤에 그 소비 라인을 보내므로
-        // ([startNewRun]), 대기중을 통째로 막으면 지도·나침반·탐침 값이 집계에서 조용히
-        // 사라져 수익이 실제보다 높게 나온다.
-        if (standbyStopsValueNow() && !inMapEntryConsume) {
+        // 맵 진입 비용은 예외다. 지도는 마을에서 여는 데다 게임은 `inMap = false` 를 세운 뒤에
+        // 그 소비 라인을 보내므로([startNewRun]), 마을을 통째로 막으면 지도·나침반·탐침 값이
+        // 집계에서 조용히 사라져 수익이 실제보다 높게 나온다.
+        if (townStopsValueNow() && !inMapEntryConsume) {
             slotLastCount[slotUuid] = totalCountInSlot
             return
         }
@@ -1288,6 +1308,23 @@ class SessionAggregator(
                 currentMapElapsedSinceMs = if (clockRuns) now else null,
             )
         }
+        // areaId 를 실은 지역 진입 신호가 왔다 = 어느 지역으로든 들어갔다 = 마을 로비가 아니다.
+        //
+        // 시즌맵·특수지역은 **자기 MapName 을 안 보낸다** (실기기 확인 2026-09-10: 마을 복귀
+        // `MapName=XZ_YuJinZhiXiBiNanSuo200` 뒤에 이름 없이 `EnterArea areaId=2035` 만 왔다).
+        // 그래서 마을 이름만 보고 [inTown] 을 내리면 특수지역까지 마을로 끌고 가서 수익이 막힌다.
+        //
+        // 반대 방향은 안전하다 — 같은 기록에서 마을 도착에는 areaId 가 안 실려 왔다. 이 함수는
+        // areaId 만 있으면 무시되는 신호까지 전부 [recordPresence] 로 남기는데 마을 복귀 뒤
+        // 진입 기록이 하나도 없었으니, 마을은 이 분기를 안 탄다는 뜻이다. 혹시 타더라도 최악은
+        // "마을 수익이 다시 잡힌다"(예전 동작) 이지 파밍 수익이 사라지는 쪽이 아니다.
+        //
+        // 블록 **밖**에서 내리는 이유는 그 안이 CAS 재시도로 여러 번 돌 수 있어서다.
+        if (newArea != null) inTown = false
+        // 맵에 들어왔다 = 맵 열기 비용은 이미 다 지나갔다. `end` 라인이 안 올 때 예외가 굳는 걸
+        // 막는 안전망이다 (`inMap` 이 true 로 서는 곳은 위 update 블록뿐 — [setMapPresence] 는
+        // false 로만 불린다).
+        if (_state.value.inMap) inMapEntryConsume = false
         enterAreaPresenceReason?.let {
             recordPresence(_state.value.inMap, it)
             enterAreaPresenceReason = null

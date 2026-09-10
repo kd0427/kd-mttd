@@ -667,7 +667,12 @@ class SessionAggregator(
             // 마을 판정은 여기 한 곳에서만 선다 ([inTown] 참조). 로그인 화면은 마을이 아니다 —
             // 캐릭터를 고르는 중이라 파밍도 우편 수령도 없고, 마을로 들어가면 그때 마을
             // MapName 이 따로 온다.
+            val wasInTown = inTown
             inTown = isTownCode
+            // 마을 도착은 이미 맵 밖이면 [setMapPresence] 가 아무것도 안 남긴다. 그러면 그 뒤에
+            // 오는 지역 진입이 마을 도착인지 다른 데로 넘어간 건지 기록만 봐서는 못 가른다 —
+            // 이 판정을 두 번 헛짚게 만든 사각이라 마을 도착 자체를 남긴다.
+            if (isTownCode && !wasInTown) recordPresence(false, "마을 도착(MapName=$code)")
             if (isLogin || isTownCode) {
                 latestMapCode = null
                 awaitingMapArea = false
@@ -1271,7 +1276,8 @@ class SessionAggregator(
             // "이번 진입" 목록은 여기서 비우지 않는다. 맵 열기(Spv3Open) 직후 ~100 ms 만에
             // 이 이벤트가 오기 때문에, 여기서 비우면 방금 기록한 소비(마이너스) 가 사라진다.
             // 목록 초기화는 startNewRun() 이 Spv3Open 시점에 수행.
-            val enteringOpenedMap = awaitingMapArea
+            // 진입 판정에는 더 이상 안 쓴다 (아래 [stillInMap] 참조). 다만 `newArea == null` 인
+            // EnterArea 를 이탈로 칠지 가르는 데는 여전히 쓰이므로 여기서 소진한다.
             awaitingMapArea = false
             val now = System.currentTimeMillis()
             val mapChunk = s.mapElapsedSinceMs?.let { since -> (now - since).coerceAtLeast(0) } ?: 0
@@ -1279,18 +1285,27 @@ class SessionAggregator(
             // EnterArea 는 맵 **진입**만 알린다. 이탈은 InputArea(지역 선택 복귀) ·
             // MapName 의 마을/LoginScene · areaId 없는 EnterArea 가 판정한다.
             //
-            // 예전엔 여기서 `inMap = enteringOpenedMap` 으로 덮어써서, 맵 안에서 다른 맵
-            // 보스로 이동하는 이벤트처럼 Spv3Open 없이 지역만 바뀌면 맵을 나간 것으로 오인해
-            // 시계가 그 맵 내내 멈췄다 (`awaitingMapArea` 는 첫 진입에서 이미 소진되므로
-            // 두 번째 지역부터는 항상 false 다).
-            val stillInMap = enteringOpenedMap || s.inMap
+            // 예전엔 맵 열기(`Spv3Open`)나 맵 이름을 먼저 봐야만 진입으로 쳤다. 그래서 그 둘을
+            // 안 보내는 지역 — 시즌맵·특수지역 — 은 진입 신호가 와도 맵 밖으로 남아 시계가
+            // 통째로 멈췄다 (실기기 확인 2026-09-10: 마을 `MapName=XZ_YuJinZhiXiBiNanSuo200`
+            // 8 초 뒤 이름 없이 `EnterArea areaId=2035` 만 왔다).
+            //
+            // 이제 **areaId 를 실은 EnterArea 는 그 자체로 지역 진입**으로 본다. 마을 도착이
+            // 이 신호를 안 보내기 때문에 성립한다 — 같은 기록에서 게임 접속 후 마을 진입과
+            // 맵에서 마을 복귀 **둘 다** 지역 진입 기록을 안 남겼다. 이 함수는 areaId 만 있으면
+            // 무시하는 신호까지 전부 남기고 보관 한도(40)에도 한참 못 미쳤으므로, 기록이 없다는
+            // 건 신호가 없었다는 뜻이다. 마을 복귀 EnterArea 에 지역 정보가 없다는 건 위쪽
+            // "지역 정보 없는 EnterArea" 분기가 이미 그 이유로 존재한다.
+            //
+            // 여기 위 `newArea == null` 은 이미 걸러졌으므로 남은 건 전부 지역 진입이다.
+            // 맵 밖 판정은 이탈 신호들이 계속 담당한다.
+            val stillInMap = true
             enterAreaPresenceReason = when {
-                stillInMap != s.inMap -> "지역 진입(areaId=$newArea)"
+                stillInMap != s.inMap ->
+                    "지역 진입(areaId=$newArea, type=${levelType ?: "?"}, level=${levelId ?: "?"})"
                 // 판정이 안 바뀐 경우도 남긴다 — "재입장했는데 시계가 안 돈다" 를 조사하려면
                 // EnterArea 가 오긴 왔는지, 왔다면 어떤 areaId 였는지가 유일한 단서다.
-                // (맵 밖 유지 = 맵 열기(Spv3Open) 없이 지역만 바뀐 경우)
-                !stillInMap -> "지역 진입 신호 — 맵 밖 유지(areaId=$newArea)"
-                else -> "지역 이동(areaId=$newArea)"
+                else -> "지역 이동(areaId=$newArea, type=${levelType ?: "?"}, level=${levelId ?: "?"})"
             }
             val clockRuns = stillInMap && s.baselineReady && !s.paused
             s.copy(

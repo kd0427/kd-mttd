@@ -669,10 +669,18 @@ class SessionAggregator(
             // MapName 이 따로 온다.
             val wasInTown = inTown
             inTown = isTownCode
-            // 마을 도착은 이미 맵 밖이면 [setMapPresence] 가 아무것도 안 남긴다. 그러면 그 뒤에
-            // 오는 지역 진입이 마을 도착인지 다른 데로 넘어간 건지 기록만 봐서는 못 가른다 —
-            // 이 판정을 두 번 헛짚게 만든 사각이라 마을 도착 자체를 남긴다.
-            if (isTownCode && !wasInTown) recordPresence(false, "마을 도착(MapName=$code)")
+            // 마을 도착은 이미 맵 밖이면 [setMapPresence] 가 아무것도 안 남긴다 (판정이 안
+            // 바뀌므로). 그러면 그 뒤에 오는 지역 진입이 마을 도착인지 다른 데로 넘어간 건지
+            // 기록만 봐서는 못 가른다 — 이 판정을 두 번 헛짚게 만든 사각이라 직접 남긴다.
+            //
+            // 단 **한 줄만** 남긴다. 맵에서 마을로 복귀하면 판정이 바뀌므로 [setMapPresence]
+            // 가 남기고, 여기서도 남기면 같은 전환이 두 줄이 된다. 판당 한 칸씩 더 먹으면
+            // 이력 40 칸이 담는 판수가 10 판에서 8 판으로 줄어든다 — 이 이력은 집계 버그를
+            // 쫓는 유일한 도구라 깊이가 곧 쓸모다.
+            val presenceReason = if (isTownCode) "마을 도착(MapName=$code)" else "MapName=$code"
+            if (isTownCode && !wasInTown && !_state.value.inMap) {
+                recordPresence(false, presenceReason)
+            }
             if (isLogin || isTownCode) {
                 latestMapCode = null
                 awaitingMapArea = false
@@ -682,7 +690,7 @@ class SessionAggregator(
                 // (마을은 여기서 안 푼다 — 경매장은 마을 위에 뜨는 화면이라 거래 중에도
                 //  마을 MapName 이 올 수 있고, 그때 풀면 거래가 수익으로 잡힌다.)
                 if (isLogin) exitExchange()
-                setMapPresence(false, "MapName=$code")
+                setMapPresence(false, presenceReason)
             } else if (code != latestMapCode && code.isNotEmpty()) {
                 latestMapCode = code
                 // 맵 밖인데 맵(마을·로그인이 아닌) 이름이 관측됐다 = 맵으로 들어가는 중이다.
@@ -1457,7 +1465,7 @@ class SessionAggregator(
         /** "자산" 탭/HUD 에 보여줄 최대 보유 아이템 종류 수 (가치 내림차순으로 자름). */
         private const val MAX_HOLDINGS = 50
         const val MAX_TIME_SAMPLES = 60   // 1분당 1점 × 60 = 최근 1시간
-        /** 진단용 맵 전환 이력 보관 개수. 맵 한 번에 2~3건 남으니 최근 몇 판은 덮인다. */
+        /** 진단용 맵 전환 이력 보관 개수. 한 판(맵 열기~마을 복귀)에 4 건이라 최근 10 판쯤 남는다. */
         private const val MAX_PRESENCE_LOG = 40
     }
 }

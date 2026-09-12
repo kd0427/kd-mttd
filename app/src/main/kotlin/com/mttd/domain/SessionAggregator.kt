@@ -843,10 +843,32 @@ class SessionAggregator(
         val posKey = "$pageId:$slotId"
         val oldKey = slotKeyByPosition[posKey]
         if (oldKey != null && oldKey != newKey) {
-            val oldCount = slotLastCount.remove(oldKey)
             val sameItem = extractItemId(oldKey) != null && extractItemId(oldKey) == extractItemId(newKey)
-            if (sameItem && oldCount != null && !slotLastCount.containsKey(newKey)) {
-                slotLastCount[newKey] = oldCount
+            // 옛 키를 걷어낼지는 **그 키가 자리에 묶인 것인지 인스턴스에 묶인 것인지**로 가른다.
+            // 예전엔 자리를 뺏기면 무조건 지웠는데, 그건 "이 자리에 없다 = 사라졌다" 라는
+            // 가정이라 틀렸다.
+            when {
+                // (1) 같은 아이템 = 같은 물리 슬롯의 키 형태 전환(합성 키 ↔ uuid 키).
+                //     수량을 새 키로 이어받는다. 안 이어받으면 그 다음 획득이 "처음 보는
+                //     슬롯" 으로 오판돼 보유량 전체가 이번 획득으로 잡힌다.
+                sameItem -> {
+                    val oldCount = slotLastCount.remove(oldKey)
+                    if (oldCount != null && !slotLastCount.containsKey(newKey)) {
+                        slotLastCount[newKey] = oldCount
+                    }
+                }
+                // (2) 합성 키(`page:slot:itemId`)는 **자리에 묶인** 키다. 그 자리에 다른
+                //     아이템이 왔으면 그 키가 가리키던 것은 더 이상 거기 없다 = 죽은 키다.
+                //     남겨두면 [computeHoldings] 가 유령 보유량으로 세고, 나중에 같은 자리에
+                //     같은 아이템이 다시 오면 옛 수량과 비교해 음수 델타(가짜 소비)가 난다.
+                oldKey.contains(':') -> slotLastCount.remove(oldKey)
+                // (3) uuid 키는 **인스턴스에 묶인** 키다. 자리를 뺏겼다는 건 사라졌다는 게
+                //     아니라 **다른 칸으로 옮겨갔다**는 뜻일 수 있다 (분해 등으로 가방이
+                //     재배치될 때). 여기서 지우면 기준 수량을 잃어서, 그 아이템을 다음에 하나
+                //     먹을 때 들고 있던 수량까지 통째로 이번 획득으로 잡힌다 (실측 신고:
+                //     20 개 들고 있다가 1 개 먹었는데 21 개가 수익으로). 그러니 건드리지 않는다.
+                //     정말 사라진 슬롯은 `Delete` / `Num = 0` 이 0 으로 만든다.
+                else -> Unit
             }
         }
         slotKeyByPosition[posKey] = newKey

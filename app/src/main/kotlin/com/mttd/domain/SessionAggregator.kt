@@ -933,6 +933,32 @@ class SessionAggregator(
         publishRuns()
     }
 
+    /**
+     * 맵 열기 신호 없이 들어온 맵(시즌맵·특수지역)의 회차 경계.
+     *
+     * [startNewRun] 과 달리 위치·거래소·`awaitingMapArea` 는 건드리지 않는다 — 그건 맵 열기
+     * 시점에만 의미가 있고, 여기서는 이미 [handleEnterArea] 가 맵 안으로 만든 뒤다.
+     * 끊는 것은 판 단위 세 가지뿐이다: 맵핑 횟수, "이번 맵" 시계, 회차.
+     */
+    private fun startRunForSignallessEntry() {
+        val now = System.currentTimeMillis()
+        _state.update {
+            it.copy(
+                mapsEntered = it.mapsEntered + 1,
+                currentMapElapsedAccumulatedMs = 0,
+                currentMapElapsedSinceMs =
+                    if (it.inMap && it.baselineReady && !it.paused) now else null,
+            )
+        }
+        closeCurrentRun()
+        currentRunId = nextRunId++
+        currentRunStartedAtMs = now
+        // 맵 열기와 달리 이름은 이미 정해져 있다 — 방금 이 진입이 채웠다.
+        currentRunMapName = _state.value.currentMapName
+        currentRunByItem.clear()
+        publishRuns()
+    }
+
     /** 맵 안/밖 전환 시 맵 전용 시계를 확정하거나 재개한다. */
     /**
      * 맵 안/밖 전환. 누적 시간에 더하는 조각은 전부 `coerceAtLeast(0)` 을 거친다 —
@@ -1259,6 +1285,11 @@ class SessionAggregator(
         // (예: 로딩 단계 → 로딩 완료 → 실제 게임플레이 각각 fire)
         val nowMs = msg.header.timestampEpochMs
 
+        // 아래 update 블록 **전**의 상태. 블록은 CAS 재시도로 여러 번 돌 수 있어 안에서
+        // 판단하면 안 된다. "신호 없이 들어온 진입" 인지를 가리는 데 쓴다.
+        val wasInMap = _state.value.inMap
+        val hadEntrySignal = awaitingMapArea
+
         // update 블록은 CAS 재시도로 여러 번 돌 수 있어 안에서 바로 기록하면 중복될 수 있다.
         // 전환이 있었는지만 표시해 두고 블록 밖에서 한 번 남긴다.
         enterAreaPresenceReason = null
@@ -1345,6 +1376,20 @@ class SessionAggregator(
                 currentMapElapsedSinceMs = if (clockRuns) now else null,
             )
         }
+        // 맵 열기(`Spv3Open`)도 맵 이름도 없이 들어온 진입 = 시즌맵·특수지역.
+        //
+        // 0.6.12 가 이 경로로도 시계는 돌게 했는데 **회차 경계는 여전히 맵 열기 하나만** 열고
+        // 있었다 ([startNewRun] 의 유일한 호출부가 `Spv3Open` 이다). 그래서 시즌맵 전리품이
+        // 직전 맵 회차에 얹히고, 맵핑 횟수가 안 오르고, "이번 맵" 시계가 앞 맵 시간을 그대로
+        // 이어받았다. 수익이 안 잡히던 것보다 **엉뚱한 회차에 잡히는 게 더 나쁘다** — 회차별
+        // 수익을 보고 판단할 수 없게 된다.
+        //
+        // `wasInMap` 이 맵 안 지역 이동(보스 이동 등)을, `hadEntrySignal` 이 맵 열기와
+        // 재입장(맵 이름 관측)을 걸러낸다. 둘 다 기존 경계 규칙이 이미 담당한다.
+        if (!wasInMap && !hadEntrySignal && _state.value.inMap) {
+            startRunForSignallessEntry()
+        }
+
         // areaId 를 실은 지역 진입 신호가 왔다 = 어느 지역으로든 들어갔다 = 마을 로비가 아니다.
         //
         // 시즌맵·특수지역은 **자기 MapName 을 안 보낸다** (실기기 확인 2026-09-10: 마을 복귀

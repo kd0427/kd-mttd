@@ -944,11 +944,18 @@ class SessionAggregator(
     /**
      * 맵 열기 신호 없이 들어온 맵(시즌맵·특수지역)의 회차 경계.
      *
-     * [startNewRun] 과 달리 위치·거래소·`awaitingMapArea` 는 건드리지 않는다 — 그건 맵 열기
-     * 시점에만 의미가 있고, 여기서는 이미 [handleEnterArea] 가 맵 안으로 만든 뒤다.
-     * 끊는 것은 판 단위 세 가지뿐이다: 맵핑 횟수, "이번 맵" 시계, 회차.
+     * [startNewRun] 과 달리 위치와 `awaitingMapArea` 는 건드리지 않는다 — 그건 맵 열기 시점에만
+     * 의미가 있고, 여기서는 이미 [handleEnterArea] 가 맵 안으로 만든 뒤다.
+     * 끊는 것은 판 단위 세 가지다: 맵핑 횟수, "이번 맵" 시계, 회차.
+     *
+     * **거래소 해제는 여기서도 한다.** 처음엔 이것도 맵 열기 전용이라고 봤는데 아니었다 —
+     * 거래소 종료 신호(`Destory`)는 그 화면에서 게임이 죽으면 로그에 안 남고, 그러면
+     * `inExchange` 와 그게 건 pause 가 굳어 [handleModfy] 가 통째로 막힌다. 맵에 들어왔다는
+     * 건 거래소 밖이라는 뜻이고, 그건 맵을 어떻게 열었는지와 무관하다. 안 풀면 그 판의
+     * **시간도 수익도 통째로 안 잡힌다** — 시간당 수익은 멀쩡해 보이므로 눈치채기 어렵다.
      */
     private fun startRunForSignallessEntry() {
+        exitExchange()
         val now = System.currentTimeMillis()
         _state.update {
             it.copy(

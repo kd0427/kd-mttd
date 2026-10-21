@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -65,6 +68,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -92,6 +96,7 @@ import com.mttd.service.TrackerForegroundService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1146,7 +1151,7 @@ private fun LogTailCard(userService: () -> IUserService?) {
             )
 
             HorizontalDivider()
-            Text("최근 라인 (10개)", fontWeight = FontWeight.SemiBold)
+            Text("최근 라인 (최대 500개)", fontWeight = FontWeight.SemiBold)
             // 이 목록은 새 로그가 올 때마다 저절로 바뀐다(StateFlow 구독). 당겨올 게 없어서
             // 새로고침 버튼은 의미가 없다 — 안 바뀌면 새 줄이 안 오는 것이고, 그 이유는
             // 바로 위 두 줄로 판단한다.
@@ -1166,26 +1171,50 @@ private fun RecentLines(lines: List<String>) {
     if (lines.isEmpty()) {
         Text("(아직 없음)", style = MaterialTheme.typography.bodySmall)
     } else {
-        Column(
+        val context = LocalContext.current
+        val listState = rememberLazyListState()
+        // 맨 아래(최신)를 보고 있을 때만 새 줄을 따라간다. 위로 올려 읽는 중에 끌려 내려가면
+        // 원하는 줄을 못 찾는다.
+        var follow by remember { mutableStateOf(true) }
+        LaunchedEffect(listState) {
+            // 첫 값(스크롤 전)은 버린다 — 아직 맨 위라 "따라가지 않음" 으로 굳어 버린다.
+            snapshotFlow { listState.isScrollInProgress }
+                .drop(1)
+                .collect { scrolling -> if (!scrolling) follow = !listState.canScrollForward }
+        }
+        LaunchedEffect(lines) {
+            if (follow) listState.scrollToItem(lines.lastIndex)
+        }
+        // 높이는 예전 10줄 목록과 비슷하게 고정하고, 나머지는 안에서 스크롤한다.
+        LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxWidth()
+                .height(320.dp)
                 .background(
                     Color(0xFF0F172A).copy(alpha = 0.85f),
                     RoundedCornerShape(8.dp),
-                )
-                .padding(8.dp),
+                ),
+            contentPadding = PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            for (line in lines) {
+            items(lines) { line ->
                 Text(
                     line,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFE2E8F0),
                     fontFamily = FontFamily.Monospace,
-                    maxLines = 2,
                 )
             }
         }
+        TextButton(
+            onClick = {
+                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                    as android.content.ClipboardManager
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("mttd recent log", lines.joinToString("\n")))
+                android.widget.Toast.makeText(context, "로그 ${lines.size}줄을 복사했습니다", android.widget.Toast.LENGTH_SHORT).show()
+            },
+        ) { Text("로그 복사하기") }
     }
 }
 

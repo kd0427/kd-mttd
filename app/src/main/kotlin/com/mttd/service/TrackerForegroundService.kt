@@ -145,7 +145,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
     val mapPresenceLog: StateFlow<List<SessionAggregator.MapPresenceEvent>>
         get() = aggregator.mapPresenceLog
 
-    /** 진단 화면에 보여줄 마지막 원본 로그 10줄. 구독 타이밍과 무관하게 항상 유지한다. */
+    /** 진단 화면에 보여줄 마지막 원본 로그 500줄. 구독 타이밍과 무관하게 항상 유지한다. */
     private val _recentLines = MutableStateFlow<List<String>>(emptyList())
     val recentLines: StateFlow<List<String>> = _recentLines.asStateFlow()
 
@@ -430,7 +430,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
                     return@collect
                 }
                 // SharedFlow replay는 진단 화면의 구독 교체 타이밍에 비어 보일 수 있다.
-                // 상태로 마지막 10줄을 직접 유지해, 읽은 로그와 화면이 반드시 일치하게 한다.
+                // 상태로 마지막 500줄을 직접 유지해, 읽은 로그와 화면이 반드시 일치하게 한다.
                 // 폴러가 이제 offset 을 같이 실어 보내므로(로그 릴레이가 스냅샷 시작 지점을
                 // 기억해야 한다) 진단 화면에는 원문만 뽑아 넣는다.
                 _recentLines.value = (_recentLines.value + line.text).takeLast(MAX_RECENT_DEBUG_LINES)
@@ -701,7 +701,7 @@ class TrackerForegroundService : LifecycleService(), SavedStateRegistryOwner {
         private const val STALL_RETRY_MIN_SAMPLES = 2
         /** 계속 실패할 때 재연결 시도 간격의 상한. 40 회 = 10 분. */
         private const val STALL_RETRY_MAX_SAMPLES = 40
-        private const val MAX_RECENT_DEBUG_LINES = 10
+        private const val MAX_RECENT_DEBUG_LINES = 500
         const val ACTION_START = "com.mttd.action.START_LOG"
         const val ACTION_STOP = "com.mttd.action.STOP_LOG"
         const val ACTION_SHOW_OVERLAY = "com.mttd.action.SHOW_OVERLAY"

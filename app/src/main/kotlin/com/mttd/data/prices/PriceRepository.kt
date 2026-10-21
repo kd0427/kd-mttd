@@ -1,11 +1,13 @@
 package com.mttd.data.prices
 
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * In-memory 시세 캐시 + 갱신 정책.
@@ -19,9 +21,9 @@ class PriceRepository(
     private val api: PriceApi,
     private val ttdApi: TtdPriceApi = TtdPriceApi(),
     /**
-     * TTD 응답의 name/type 은 가격 계산엔 안 쓰지만 [refreshTtd] 가 어차피 fetch 하는
-     * 부산물이라, 새 아이템 이름 사전(gap-fill) 을 채우고 싶은 쪽(ItemInfoLookup)에
-     * 넘겨준다. TTD 가 실제로 fetch 될 때만 호출됨 — 이걸 위해 별도 네트워크 호출은 없음.
+     * TTD 응답의 name/type 은 가격 계산엔 안 쓰지만, 새 아이템 이름 사전(gap-fill) 을 채우고
+     * 싶은 쪽(ItemInfoLookup)에 넘겨준다. TTD 시세를 쓸 때는 [refreshTtd] 의 부산물이고,
+     * ETor 시세를 쓸 때는 [fetchTtdNamesOnce] 가 이름만 받으려고 프로세스당 한 번 따로 부른다.
      */
     private val onTtdItemsFetched: (Map<String, TtdPriceApi.Item>) -> Unit = {},
 ) {
@@ -77,7 +79,33 @@ class PriceRepository(
 
         return when (_source.value) {
             PriceSource.TTD -> refreshTtd()
-            PriceSource.ETOR -> refreshEtorLatestSeason()
+            PriceSource.ETOR -> refreshEtorLatestSeason().also { fetchTtdNamesOnce() }
+        }
+    }
+
+    /** ETor 시세를 쓰는 동안 TTD 이름을 이미 받았는지. 실패하면 다음 갱신 때 다시 시도한다. */
+    @Volatile
+    private var ttdNamesFetched = false
+
+    /**
+     * 시세 출처와 상관없이 새 아이템 **이름**은 TTD 에서 채운다.
+     *
+     * 번들 사전(`item_names_ko.json`)은 시즌마다 손으로 갱신하는데, 그 전까지 새 시즌 아이템은
+     * `Unknown (id=…)` 으로 보였다. 예전엔 TTD 시세를 고른 사람만 이름이 채워졌고 기본값은
+     * ETor 라 대부분이 그 상태였다. 아이콘은 여기서 안 채운다 — TTD 응답에 없다.
+     *
+     * 이름 보완일 뿐이라 실패해도 시세 갱신 결과에는 영향을 주지 않는다.
+     */
+    private suspend fun fetchTtdNamesOnce() {
+        if (ttdNamesFetched) return
+        try {
+            val items = ttdApi.fetchPrices()
+            // 받는 쪽이 번들 사전(~320 KB JSON)을 처음 읽게 만들 수 있다 — 메인 스레드에서 돌면
+            // 그 파싱이 화면을 멈춘다. 이 함수는 서비스의 메인 스코프에서 불린다.
+            withContext(Dispatchers.Default) { onTtdItemsFetched(items) }
+            ttdNamesFetched = true
+        } catch (t: Throwable) {
+            Log.w(TAG, "TTD name fetch failed", t)
         }
     }
 

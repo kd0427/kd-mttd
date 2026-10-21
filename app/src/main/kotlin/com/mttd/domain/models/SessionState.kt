@@ -83,6 +83,14 @@ data class SessionState(
 
     /** 게임 내 거래소(경매장) 화면이 열려있는 동안 true. 열려있는 동안은 픽업 집계를 멈춘다. */
     val inExchange: Boolean = false,
+    /**
+     * 시즌 미니게임(`S16BoardMain`) 화면이 열려있는 동안 true.
+     *
+     * 미니게임은 마을에서도 열리는 플레이라, 열려있는 동안은 맵 안처럼 시간과 수익을 센다.
+     * [inMap] 을 건드리지 않고 따로 두는 건 `inMap` 이 맵핑 횟수·회차 경계·마을 판정에 같이
+     * 묶여 있어서다 — 시계와 마을 수익 차단만 [inPlayZone] 으로 본다.
+     */
+    val inMinigame: Boolean = false,
     /** 거래소 진입 시점(또는 수동 새로고침 시점)의 현재 보유 아이템, 가치 내림차순. */
     val holdings: List<PickupSummary> = emptyList(),
 
@@ -103,6 +111,10 @@ data class SessionState(
      */
     val gameAway: Boolean = false,
 ) {
+    /** MAP_ONLY 시계가 도는 곳인지 — 맵 안이거나 미니게임 중. "이번 맵" 시계는 [inMap] 만 본다. */
+    val inPlayZone: Boolean
+        get() = inMap || inMinigame
+
     /**
      * 경과 시간. baseline (가방 정렬) 관측 전에는 0.
      * paused 구간의 시간은 누적 제외.
@@ -121,7 +133,7 @@ data class SessionState(
                 TimeTrackingMode.MAP_ONLY -> {
                     // 이탈 로그의 순서가 뒤섞여 `mapElapsedSinceMs`가 잠시 남더라도,
                     // 맵 밖 상태에서는 절대로 현재 시각을 더하지 않는다.
-                    val currentMapChunk = if (inMap && !paused) {
+                    val currentMapChunk = if (inPlayZone && !paused) {
                         mapElapsedSinceMs?.let { now - it } ?: 0
                     } else {
                         0

@@ -89,6 +89,7 @@ class SessionAggregator(
             paused = prev.paused,
             pausedSinceMs = if (prev.paused) System.currentTimeMillis() else null,
             inExchange = prev.inExchange,
+            inMinigame = prev.inMinigame,
             // 로그 연결 상태도 "지금 상태" 다 — 리셋으로 지우면 끊긴 채로 "진행중" 이 다시 뜬다.
             logStalled = prev.logStalled,
             gameAway = prev.gameAway,
@@ -141,7 +142,7 @@ class SessionAggregator(
                 paused = false,
                 pausedSinceMs = null,
                 pausedAccumulatedMs = it.pausedAccumulatedMs + chunk,
-                mapElapsedSinceMs = if (it.inMap && it.baselineReady) now else null,
+                mapElapsedSinceMs = if (it.inPlayZone && it.baselineReady) now else null,
                 currentMapElapsedSinceMs = if (it.inMap && it.baselineReady) now else null,
             )
         }
@@ -192,7 +193,7 @@ class SessionAggregator(
     private fun townStopsValueNow(): Boolean {
         if (!townStopsValue) return false
         val s = _state.value
-        return s.timeTrackingMode == TimeTrackingMode.MAP_ONLY && !s.inMap && inTown
+        return s.timeTrackingMode == TimeTrackingMode.MAP_ONLY && !s.inMap && !s.inMinigame && inTown
     }
 
     /**
@@ -250,6 +251,49 @@ class SessionAggregator(
             resumeSession()
             pausedByExchange = false
         }
+    }
+
+    /**
+     * 미니게임 진입. 맵 밖이면 MAP_ONLY 시계를 켠다 — 맵 안이면 이미 돌고 있다.
+     *
+     * 시계를 켜려고 `inMap` 을 세우면 안 된다 ([SessionState.inMinigame] 참조).
+     */
+    private fun enterMinigame() {
+        if (_state.value.inMinigame) return
+        _state.update { s ->
+            val now = System.currentTimeMillis()
+            s.copy(
+                inMinigame = true,
+                mapElapsedSinceMs = s.mapElapsedSinceMs
+                    ?: if (s.baselineReady && !s.paused) now else null,
+            )
+        }
+        recordPresence(_state.value.inMap, "미니게임 열림(S16BoardMain)")
+    }
+
+    /**
+     * 미니게임 종료. 맵 밖이면 돌던 구간을 누적에 넣고 시계를 세운다.
+     *
+     * 닫는 신호(`Destory`)를 못 받으면 마을에서 시계와 수익이 계속 돈다 — 거래소와 같은 위험이라
+     * 맵 열기·지역 진입·지역 선택 복귀·로그인 화면에서도 부른다. 미니게임이 끝나면 바로 보스방으로
+     * 넘어가는데, 그 경로에서 닫는 신호가 오는지는 아직 확인 못 했다.
+     */
+    private fun exitMinigame(reason: String) {
+        if (!_state.value.inMinigame) return
+        _state.update { s ->
+            if (s.inMap) {
+                s.copy(inMinigame = false)
+            } else {
+                val now = System.currentTimeMillis()
+                val chunk = s.mapElapsedSinceMs?.let { (now - it).coerceAtLeast(0) } ?: 0
+                s.copy(
+                    inMinigame = false,
+                    mapElapsedAccumulatedMs = s.mapElapsedAccumulatedMs + chunk,
+                    mapElapsedSinceMs = null,
+                )
+            }
+        }
+        recordPresence(_state.value.inMap, reason)
     }
 
     /** 현재 보유 아이템을 가치 내림차순으로 재계산해 state 에 반영. 수동 새로고침에서도 호출. */
@@ -402,6 +446,16 @@ class SessionAggregator(
     private val exchangeEnterRegex = Regex("""PageName\s*=\s*AuctionHouseV2\s*,\s*PageRunState\s*=\s*Run""")
     private val exchangeExitRegex = Regex("""PageName\s*=\s*AuctionHouseV2\s*,\s*PageRunState\s*=\s*Destory""")
 
+    /**
+     * 시즌 미니게임 화면 진입/퇴장. 거래소와 같은 형태다 (실기기 확인 2026-10-21, 마을에서 열고 닫음):
+     *   TipMsgShowMgr@DispatchPageRunChange PageName = S16BoardMain , PageRunState = Run
+     *   TipMsgShowMgr@DispatchPageRunChange PageName = S16BoardMain , PageRunState = Destory
+     * 미니게임 안에서 뜨는 `S16BoardRelicPop`·`S16BoardNewDayPop` 도 같은 줄을 찍지만 이름 뒤의
+     * `\s*,` 가 그 둘을 걸러낸다. 시즌 번호(S16)가 이름에 박혀 있어 다음 시즌엔 바뀔 수 있다.
+     */
+    private val minigameEnterRegex = Regex("""PageName\s*=\s*S16BoardMain\s*,\s*PageRunState\s*=\s*Run""")
+    private val minigameExitRegex = Regex("""PageName\s*=\s*S16BoardMain\s*,\s*PageRunState\s*=\s*Destory""")
+
     private enum class BlockContext { NONE, PICKUP, CONSUME }
     private var blockContext: BlockContext = BlockContext.NONE
 
@@ -547,6 +601,8 @@ class SessionAggregator(
         // 거래소 진입/퇴장 — 파밍 집계와 무관한 UI 전환이므로 다른 파싱과 독립적으로 처리.
         if (exchangeEnterRegex.containsMatchIn(line)) { enterExchange(); return }
         if (exchangeExitRegex.containsMatchIn(line)) { exitExchange(); return }
+        if (minigameEnterRegex.containsMatchIn(line)) { enterMinigame(); return }
+        if (minigameExitRegex.containsMatchIn(line)) { exitMinigame("미니게임 닫힘(S16BoardMain)"); return }
 
         // 맵 열기 = 새 런 시작. 이 직후의 소비(마이너스) 항목부터 "이번 진입" 에 쌓인다.
         if (mapOpenStartRegex.containsMatchIn(line)) startNewRun()
@@ -555,6 +611,7 @@ class SessionAggregator(
         // Spv3Open의 맵 진입으로 오인해 타이머가 다시 시작될 수 있다.
         if (mapExitStartRegex.containsMatchIn(line)) {
             awaitingMapArea = false
+            exitMinigame("지역 선택 복귀로 미니게임 해제")
             setMapPresence(false, "지역 선택 복귀(InputArea)")
         }
 
@@ -689,7 +746,10 @@ class SessionAggregator(
                 // 굳어 재로그인 후 파밍 집계가 통째로 막힌다.
                 // (마을은 여기서 안 푼다 — 경매장은 마을 위에 뜨는 화면이라 거래 중에도
                 //  마을 MapName 이 올 수 있고, 그때 풀면 거래가 수익으로 잡힌다.)
-                if (isLogin) exitExchange()
+                if (isLogin) {
+                    exitExchange()
+                    exitMinigame("로그인 화면으로 미니게임 해제")
+                }
                 setMapPresence(false, presenceReason)
             } else if (code != latestMapCode && code.isNotEmpty()) {
                 latestMapCode = code
@@ -720,6 +780,7 @@ class SessionAggregator(
      * - `MapName`      — 맵 코드네임
      * - `OnEnterArea`  — 맵 진입
      * - `AuctionHouseV2` — 거래소 화면 진입/퇴장
+     * - `S16BoardMain` — 시즌 미니게임 화면 진입/퇴장
      */
     private fun isInteresting(line: String): Boolean =
         line.contains("ItemChange@") ||
@@ -727,7 +788,8 @@ class SessionAggregator(
         line.contains("----Socket") ||
         line.contains("MapName") ||
         line.contains("OnEnterArea") ||
-        line.contains("AuctionHouseV2")
+        line.contains("AuctionHouseV2") ||
+        line.contains("S16BoardMain")
 
 
     /**
@@ -903,7 +965,7 @@ class SessionAggregator(
                 it.copy(
                     baselineReady = true,
                     startedAtMs = now,
-                    mapElapsedSinceMs = if (it.inMap && !it.paused) now else null,
+                    mapElapsedSinceMs = if (it.inPlayZone && !it.paused) now else null,
                     currentMapElapsedSinceMs = if (it.inMap && !it.paused) now else null,
                 )
             }
@@ -914,6 +976,7 @@ class SessionAggregator(
     private fun startNewRun() {
         // 맵을 열었다 = 거래소 밖이다. 거래소 종료 라인을 못 받은 채로 굳은 상태를 여기서도 푼다.
         exitExchange()
+        exitMinigame("맵 열기로 미니게임 해제")
         awaitingMapArea = true
         // 맵 열기는 전환이 없어도 반드시 남긴다. setMapPresence 는 inMap 이 실제로 바뀔 때만
         // 기록하는데, 맵 밖에서 맵을 열면 이미 false 라 아무 흔적이 안 남는다 — 그러면 진단
@@ -994,7 +1057,8 @@ class SessionAggregator(
                 // emit 하는 것을 거르려는 것이지, 나갔다 들어온 것까지 거르려는 게 아니다.
                 currentAreaId = if (inMap) state.currentAreaId else null,
                 mapElapsedAccumulatedMs = state.mapElapsedAccumulatedMs + chunk,
-                mapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
+                mapElapsedSinceMs =
+                    if ((inMap || state.inMinigame) && state.baselineReady && !state.paused) now else null,
                 currentMapElapsedAccumulatedMs = state.currentMapElapsedAccumulatedMs + currentMapChunk,
                 currentMapElapsedSinceMs = if (inMap && state.baselineReady && !state.paused) now else null,
             )
@@ -1418,6 +1482,9 @@ class SessionAggregator(
         //
         // 블록 **밖**에서 내리는 이유는 그 안이 CAS 재시도로 여러 번 돌 수 있어서다.
         if (newArea != null) inTown = false
+        // 지역에 들어왔다 = 미니게임 화면은 닫혔다. 미니게임을 끝내면 바로 보스방으로 넘어가는데
+        // 그때 닫는 신호가 오는지는 확인 못 했다 — 안 오면 마을로 돌아온 뒤에도 시계가 돈다.
+        if (_state.value.inMap) exitMinigame("지역 진입으로 미니게임 해제")
         // 맵에 들어왔다 = 맵 열기 비용은 이미 다 지나갔다. `end` 라인이 안 올 때 예외가 굳는 걸
         // 막는 안전망이다 (`inMap` 이 true 로 서는 곳은 위 update 블록뿐 — [setMapPresence] 는
         // false 로만 불린다).

@@ -161,16 +161,16 @@ fun IconOverlay(
     val ticking = session.active &&
         !session.paused &&
         session.baselineReady &&
-        (session.timeTrackingMode != com.mttd.domain.models.TimeTrackingMode.MAP_ONLY || session.inMap)
+        (session.timeTrackingMode != com.mttd.domain.models.TimeTrackingMode.MAP_ONLY || session.inPlayZone)
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(ticking) {
         while (ticking) { delay(1000); tick++ }
     }
 
-    val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
+    val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inPlayZone, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.elapsedMs
     }
-    val perHour = remember(session.totalValue, session.netTotalValue, showNet, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
+    val perHour = remember(session.totalValue, session.netTotalValue, showNet, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inPlayZone, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         if (showNet) session.netIncomePerHour else session.incomePerHour
     }
     // 세전/세후 전환은 표시 값만 바꾼다 — 집계는 항상 두 값을 다 들고 있다.
@@ -268,7 +268,7 @@ fun IconOverlay(
                 ) {
                     val primaryColor = when {
                         session.paused -> Color(0xFFFBBF24)
-                        session.inMap -> Color(0xFF4ADE80)
+                        session.inPlayZone -> Color(0xFF4ADE80)
                         else -> Color(0xFFCBD5E1)
                     }
                     val status = when {
@@ -277,7 +277,7 @@ fun IconOverlay(
                         session.gameAway -> "게임 꺼짐"
                         session.paused -> "중지중"
                         !session.baselineReady -> "로그·가방"
-                        session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "대기중"
+                        session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inPlayZone -> "대기중"
                         else -> "진행중"
                     }
                     val statusColor = when (status) {

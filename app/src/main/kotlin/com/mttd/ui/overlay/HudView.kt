@@ -205,18 +205,18 @@ fun HudOverlay(
     val ticking = session.active &&
         !session.paused &&
         session.baselineReady &&
-        (session.timeTrackingMode != com.mttd.domain.models.TimeTrackingMode.MAP_ONLY || session.inMap)
+        (session.timeTrackingMode != com.mttd.domain.models.TimeTrackingMode.MAP_ONLY || session.inPlayZone)
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(ticking) {
         while (ticking) { delay(1000); tick++ }
     }
-    val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, session.pausedAccumulatedMs, session.pausedSinceMs, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
+    val elapsed = remember(session.startedAtMs, session.active, session.endedAtMs, session.paused, session.pausedAccumulatedMs, session.pausedSinceMs, session.timeTrackingMode, session.inPlayZone, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.elapsedMs
     }
-    val incomePerHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
+    val incomePerHour = remember(session.totalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inPlayZone, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.incomePerHour
     }
-    val netIncomePerHour = remember(session.netTotalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inMap, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
+    val netIncomePerHour = remember(session.netTotalValue, session.active, session.endedAtMs, session.paused, session.timeTrackingMode, session.inPlayZone, session.mapElapsedAccumulatedMs, session.mapElapsedSinceMs, tick) {
         session.netIncomePerHour
     }
 
@@ -252,7 +252,7 @@ fun HudOverlay(
                     session.gameAway -> "● 게임 꺼짐"
                     session.paused -> "● 중지중"
                     !session.baselineReady -> "● 로그·가방"
-                    session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> "● 대기중"
+                    session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inPlayZone -> "● 대기중"
                     else -> "● 진행중"
                 }
                 val statusColor = when {
@@ -260,7 +260,7 @@ fun HudOverlay(
                     session.gameAway -> Color(0xFF94A3B8)
                     session.paused -> Color(0xFFF87171)
                     !session.baselineReady -> Color(0xFFFB923C)
-                    session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inMap -> Color(0xFF94A3B8)
+                    session.timeTrackingMode == com.mttd.domain.models.TimeTrackingMode.MAP_ONLY && !session.inPlayZone -> Color(0xFF94A3B8)
                     else -> Color(0xFF4ADE80)
                 }
                 Text(statusText, color = statusColor, fontSize = 10.sp, maxLines = 1)

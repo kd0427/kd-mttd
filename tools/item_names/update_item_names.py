@@ -95,19 +95,19 @@ def etor_url(u):
 
 
 def reachable(u):
-    # 열 번 받아서 여섯 번 이상 열리면 넣는다. 한 번으로는 못 가른다 — cdn.tlidb.com 은 멀쩡한
-    # 그림에도 403 을 가끔 섞어 주고(20 번 중 0~5 번), 실제로 없는 그림은 대부분 403 이다
-    # (S15 신의 잔해 06·11 번: 20 번 중 3·8 번만 열림, 2026-10-22). 후자는 앱에서도 거의 안 뜬다.
-    ok = 0
+    # 열 번 안에 한 번이라도 열리면 넣는다. cdn.tlidb.com 은 멀쩡한 그림에도 403 을 가끔 섞어 주고,
+    # 잘 안 열리는 그림도 있다 (S15 신의 잔해 06·11 번: 20 번 중 3·8 번, 2026-10-22). 그래도
+    # 주소가 있으면 앱이 띄울 때마다 다시 시도하고 한 번 받으면 캐시하므로 결국 뜬다. 주소를 빼면
+    # 영영 안 뜬다 — 한 번도 안 열리는 것만 뺀다.
     for _ in range(10):
         try:
             with urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=20) as r:
                 if r.status == 200 and len(r.read()) > 100:
-                    ok += 1
+                    return True
         except Exception:
             pass
         time.sleep(0.3)
-    return ok >= 6
+    return False
 
 
 def contact_sheets(work, entries):

@@ -30,7 +30,10 @@ class ValueCalculator(
     fun compute(itemId: String?, quantity: Int): Result {
         // 히어로 추억은 옵션마다 값이 천차만별이라 기본 ID 하나에 매긴 가격은 의미가 없다.
         // 경매장에서 한 번 조회하면 그 평균가가 이후 줍는 모든 추억에 붙어 수익이 부풀었다.
-        if (itemId in HERO_MEMORY_IDS) return Result(0f, 0.0, priced = false)
+        // 명왕의 신격은 사용자가 석판처럼 수익에서 빼기로 했다 (TTD 엔 시세가 있다).
+        if (itemId in HERO_MEMORY_IDS || itemId in PLUTO_DIVINITY_IDS) {
+            return Result(0f, 0.0, priced = false)
+        }
         val obs = observed?.priceOf(itemId)
         if (obs != null) {
             val total = obs.toDouble() * quantity
@@ -73,5 +76,7 @@ class ValueCalculator(
         const val AUCTION_TAX_MULTIPLIER = 7.0 / 8.0
         /** 히어로 추억(근원·자기 수호·진격). 가격 출처와 상관없이 수익으로 세지 않는다. */
         val HERO_MEMORY_IDS = setOf("71001", "71002", "71003")
+        /** 명왕의 신격(심판·인펙션·추방). 가격 출처와 상관없이 수익으로 세지 않는다. */
+        val PLUTO_DIVINITY_IDS = setOf("394004", "394005", "394006")
     }
 }
